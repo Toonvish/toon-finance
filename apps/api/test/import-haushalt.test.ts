@@ -12,8 +12,12 @@
  * `bun test`, already IS a fresh temp-file database (env.ts's
  * `defaultTestDatabaseUrl()`) — because the write path's idempotency
  * (`(householdId, externalKey)`, not `externalKey` alone) and its household
- * scoping are exactly what small hand-built fixtures cannot exercise.
+ * scoping are exactly what small hand-built fixtures cannot exercise. That
+ * section SKIPS when the workbook is absent: it holds real household finances
+ * and is gitignored, so a fresh clone has everything except those five
+ * cross-checks.
  */
+import { existsSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 import { and, eq } from "drizzle-orm";
 import {
@@ -372,7 +376,18 @@ test("toPeriod round-trips a CalendarDate", () => {
 /* integration test at all — only the parser unit tests above)               */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * The workbook is the operator's own household finances and is deliberately
+ * NOT in the repository (`.gitignore`) — the import is a one-off that has
+ * already run, so the file has no business travelling with the code. Every
+ * number it proves is pinned independently in
+ * `packages/shared/test/fixtures/haushalt-xlsx.ts`, which is what the rest of
+ * the suite runs against; the two blocks below are the cross-check that the
+ * fixture and the real sheet still agree, and they run only for whoever has
+ * the file lying next to the repo root.
+ */
 const HAUSHALT_XLSX_PATH = `${import.meta.dir}/../../../Haushalt.xlsx`;
+const HAS_WORKBOOK = existsSync(HAUSHALT_XLSX_PATH);
 const REAL_IMPORT_DATE: CalendarDate = { year: 2026, month: 8, day: 9 }; // pinned, not todayBerlin() — deterministic
 
 async function joinAsSecondMember(owner: TestUser, householdId: string, member: TestUser): Promise<void> {
@@ -382,7 +397,7 @@ async function joinAsSecondMember(owner: TestUser, householdId: string, member: 
   expect(accept.status).toBe(200);
 }
 
-describe("writeImportRecords against the real Haushalt.xlsx (docs/spec.md §7.6)", () => {
+describe.skipIf(!HAS_WORKBOOK)("writeImportRecords against the real Haushalt.xlsx (docs/spec.md §7.6)", () => {
   test("writes exactly 310 rows once; re-running the same import writes nothing", async () => {
     const owner = await createUser("Owner");
     const partner = await createUser("Partner");
@@ -513,7 +528,7 @@ describe("writeImportRecords against the real Haushalt.xlsx (docs/spec.md §7.6)
   });
 });
 
-describe("the CLI entry point (import.meta.main guard)", () => {
+describe.skipIf(!HAS_WORKBOOK)("the CLI entry point (import.meta.main guard)", () => {
   test("--dry-run without --household exits 0 and performs no write, via the real subprocess", async () => {
     const proc = Bun.spawnSync({
       cmd: ["bun", "run", "apps/api/scripts/import-xlsx.ts", "Haushalt.xlsx", "--dry-run"],

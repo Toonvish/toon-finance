@@ -13,3 +13,7 @@ data/
 .vite/
 dev-dist/
 coverage/
+
+# Die Haushalts-Arbeitsmappe des Betreibers: echte Finanzdaten, der einmalige
+# Import ist längst gelaufen. Gehört nicht ins Repository.
+Haushalt.xlsx
