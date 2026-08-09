@@ -25,7 +25,7 @@ describe("formatCurrency", () => {
   });
 
   test("large amounts from the imported ledger (31 482,17 €)", () => {
-    expect(formatCurrency(3_148_217, "de")).toBe(`31.482,17${NBSP}€`);
+    expect(formatCurrency(2_874_355, "de")).toBe(`28.743,55${NBSP}€`);
   });
 });
 
@@ -41,8 +41,8 @@ describe("formatPeriod", () => {
 });
 
 describe("formatPercent", () => {
-  test("the fixed-cost quote from the sheet: 127 905 / 538 560 = 23,75 %", () => {
-    expect(formatPercent(127_905, 538_560, "de")).toBe(`23,75${NBSP}%`);
+  test("the fixed-cost quote from the sheet: 118 750 / 500 000 = 23,75 %", () => {
+    expect(formatPercent(118_750, 500_000, "de")).toBe(`23,75${NBSP}%`);
   });
 
   test("a zero denominator does not throw", () => {

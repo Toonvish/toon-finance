@@ -37,7 +37,7 @@ import { writeFileSync } from "node:fs";
 /* -------------------------------------------------------------------------- */
 
 /** Index into the shared-string table for the one TEXT-typed amount cell (`H4` here, `H79` in the real sheet). */
-const SHARED_STRINGS = ["28,93"] as const;
+const SHARED_STRINGS = ["31,47"] as const;
 
 export const SYNTHETIC = {
   /** A/B — P1 paid, split 50/50. Row 5 has a label and NO amount. */
@@ -55,7 +55,7 @@ export const SYNTHETIC = {
   /** G/H — P1 paid FOR P2 (OTHER_ONLY). Row 4 is the text-cell quirk. */
   gh: [
     { row: 3, label: "Extra 03.07.2023", amount: "40" },
-    { row: 4, label: "Textzelle", amount: null, sharedStringIndex: 0 }, // "28,93"
+    { row: 4, label: "Textzelle", amount: null, sharedStringIndex: 0 }, // "31,47"
   ],
   /** M/N — `(amount, months)` rent pairs, plain numeric cells only. */
   rent: [

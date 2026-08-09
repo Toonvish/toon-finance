@@ -80,7 +80,7 @@ describe("GET /api/households/:householdId/balance", () => {
     await call(`/api/households/${householdId}/transactions`, {
       method: "POST",
       cookie: owner.cookie,
-      body: { kind: "FOR_THEM", amountCents: 4_458_891, description: "Sammelüberweisung", tags: ["sammelbuchung"] },
+      body: { kind: "FOR_THEM", amountCents: 4_128_099, description: "Sammelüberweisung", tags: ["sammelbuchung"] },
     });
     await call(`/api/households/${householdId}/transactions`, {
       method: "POST",
@@ -89,7 +89,7 @@ describe("GET /api/households/:householdId/balance", () => {
     });
 
     const withAggregates = await body<BalanceResponse>(await call(`/api/households/${householdId}/balance`, { cookie: owner.cookie }));
-    expect(withAggregates.balanceCents).toBe(4_458_891 + 500);
+    expect(withAggregates.balanceCents).toBe(4_128_099 + 500);
 
     const without = await body<BalanceResponse>(
       await call(`/api/households/${householdId}/balance?includeAggregates=false`, { cookie: owner.cookie }),

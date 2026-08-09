@@ -3,7 +3,7 @@
  * `(amountCents, months)` pairs read from `M23:M36`/`N23:N36` become one
  * `OTHER_ONLY` transaction per month, contiguous, starting at the named
  * constant `2022-06` (the only anchor for the series' start — `O16`'s label
- * `"Sandy Miete ab 01.06.2022"`, docs/ledger-spec.md §1.7 point 3).
+ * `"Robin Miete ab 01.06.2022"`, docs/ledger-spec.md §1.7 point 3).
  */
 import { nextPeriod, type Period } from "@toon/shared";
 

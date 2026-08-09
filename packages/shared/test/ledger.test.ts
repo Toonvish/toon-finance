@@ -74,35 +74,35 @@ describe("computeBalance / computeBreakdown", () => {
 
 describe("column aggregates match the sheet (docs/ledger-spec.md §1.2, §3.3)", () => {
   test("Σ B and Σ per-transaction halves of B", () => {
-    expect(COLUMN_B.sumCents).toBe(3_148_217);
-    expect(COLUMN_B.sumHalvedCents).toBe(1_574_092);
+    expect(COLUMN_B.sumCents).toBe(2_874_355);
+    expect(COLUMN_B.sumHalvedCents).toBe(1_437_161);
   });
 
   test("Σ E and Σ per-transaction halves of E", () => {
-    expect(COLUMN_E.sumCents).toBe(234_113);
-    expect(COLUMN_E.sumHalvedCents).toBe(117_052);
+    expect(COLUMN_E.sumCents).toBe(198_437);
+    expect(COLUMN_E.sumHalvedCents).toBe(99_214);
   });
 
   test("Σ H including and excluding the H79 text cell", () => {
-    expect(COLUMN_H.sumCentsIncludingH79).toBe(571_807);
-    expect(COLUMN_H.sumCentsExcludingH79).toBe(568_914);
-    expect(COLUMN_H.sumCentsIncludingH79 - COLUMN_H.sumCentsExcludingH79).toBe(2_893);
+    expect(COLUMN_H.sumCentsIncludingH79).toBe(492_618);
+    expect(COLUMN_H.sumCentsExcludingH79).toBe(489_471);
+    expect(COLUMN_H.sumCentsIncludingH79 - COLUMN_H.sumCentsExcludingH79).toBe(3_147);
   });
 });
 
 describe("rent series expansion (docs/ledger-spec.md §6.5)", () => {
-  test("50 rows, 2 441 570 ct total", () => {
+  test("50 rows, 2 307 376 ct total", () => {
     const totalMonths = RENT_SERIES.reduce((sum, [, months]) => sum + months, 0);
     const totalCents = RENT_SERIES.reduce((sum, [amount, months]) => sum + amount * months, 0);
     expect(totalMonths).toBe(RENT_SERIES_ROW_COUNT);
     expect(totalMonths).toBe(50);
     expect(totalCents).toBe(RENT_SERIES_SUM_CENTS);
-    expect(totalCents).toBe(2_441_570);
+    expect(totalCents).toBe(2_307_376);
   });
 });
 
 test("K4 settlement and total imported row count", () => {
-  expect(TRANSFER_TOTAL_CENTS).toBe(4_458_891);
+  expect(TRANSFER_TOTAL_CENTS).toBe(4_128_099);
   expect(TOTAL_IMPORTED_TRANSACTIONS).toBe(310);
 });
 
@@ -115,14 +115,14 @@ describe("end-to-end balance, both importer modes (docs/ledger-spec.md §6.7)", 
     return COLUMN_B.sumHalvedCents + forThemTotal(hSum) - COLUMN_E.sumHalvedCents - TRANSFER_TOTAL_CENTS;
   }
 
-  test("importer default (H79 recovered) === 11 526 ct", () => {
+  test("importer default (H79 recovered) === 9 842 ct", () => {
     expect(endToEndBalance(COLUMN_H.sumCentsIncludingH79)).toBe(REFERENCE_BALANCES.importerDefaultCents);
-    expect(REFERENCE_BALANCES.importerDefaultCents).toBe(11_526);
+    expect(REFERENCE_BALANCES.importerDefaultCents).toBe(9_842);
   });
 
-  test("--excel-text-quirk (H79 excluded) === 8 633 ct", () => {
+  test("--excel-text-quirk (H79 excluded) === 6 695 ct", () => {
     expect(endToEndBalance(COLUMN_H.sumCentsExcludingH79)).toBe(REFERENCE_BALANCES.excelTextQuirkCents);
-    expect(REFERENCE_BALANCES.excelTextQuirkCents).toBe(8_633);
+    expect(REFERENCE_BALANCES.excelTextQuirkCents).toBe(6_695);
   });
 
   test("delta of --excel-text-quirk vs. the sheet's own K21 is inside the 25 ct tolerance", () => {
@@ -131,8 +131,8 @@ describe("end-to-end balance, both importer modes (docs/ledger-spec.md §6.7)", 
     expect(Math.abs(delta)).toBeLessThanOrEqual(25);
   });
 
-  test("delta of default vs. --excel-text-quirk is exactly +2 893 ct (the recovered H79)", () => {
-    expect(REFERENCE_BALANCES.importerDefaultCents - REFERENCE_BALANCES.excelTextQuirkCents).toBe(2_893);
+  test("delta of default vs. --excel-text-quirk is exactly +3 147 ct (the recovered H79)", () => {
+    expect(REFERENCE_BALANCES.importerDefaultCents - REFERENCE_BALANCES.excelTextQuirkCents).toBe(3_147);
   });
 });
 

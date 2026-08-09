@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * `bun run seed` — a demo household for local development: two accounts
- * ("Eric" / "Sandy"), seated in slots 1 and 2 of one household, with the
+ * ("Alex" / "Robin"), seated in slots 1 and 2 of one household, with the
  * default categories and a (disabled) fixed-cost-plan row already seeded by
  * `createHousehold`. Idempotent: re-running it against an existing DB with
  * the same seed accounts is a no-op, not a duplicate-email crash.
@@ -28,16 +28,16 @@ async function ensureUser(email: string, name: string): Promise<{ id: string; cr
 
 await runMigrations();
 
-const eric = await ensureUser("eric@toon.local", "Eric");
-const sandy = await ensureUser("sandy@toon.local", "Sandy");
+const alex = await ensureUser("alex@toon.local", "Alex");
+const robin = await ensureUser("robin@toon.local", "Robin");
 
-if (eric.created) {
-  const householdId = await createHousehold(db, eric.id, { name: "Unser Haushalt", displayName: "Eric" });
-  await assignSlot(db, householdId, sandy.id, "Sandy");
-  console.log(`[seed] created household ${householdId} with Eric (slot 1) + Sandy (slot 2)`);
-  console.log(`[seed] sign in as eric@toon.local / sandy@toon.local, password: ${SEED_PASSWORD}`);
+if (alex.created) {
+  const householdId = await createHousehold(db, alex.id, { name: "Unser Haushalt", displayName: "Alex" });
+  await assignSlot(db, householdId, robin.id, "Robin");
+  console.log(`[seed] created household ${householdId} with Alex (slot 1) + Robin (slot 2)`);
+  console.log(`[seed] sign in as alex@toon.local / robin@toon.local, password: ${SEED_PASSWORD}`);
 } else {
-  console.log("[seed] eric@toon.local already exists — nothing to do");
+  console.log("[seed] alex@toon.local already exists — nothing to do");
 }
 
 await client.close();

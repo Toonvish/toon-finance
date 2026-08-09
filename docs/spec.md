@@ -222,7 +222,7 @@ export const householdMembers = sqliteTable(
     householdId: text("household_id").notNull().references(() => households.id, { onDelete: "cascade" }),
     userId: text("user_id").notNull().references(() => users.id, { onDelete: "restrict" }),
     memberSlot: integer("member_slot").notNull(),      // 1 oder 2 — 1 ist die Saldo-Perspektive
-    displayName: text("display_name").notNull(),        // "Eric", "Sandy" — im Haushalt sichtbarer Name
+    displayName: text("display_name").notNull(),        // "Alex", "Robin" — im Haushalt sichtbarer Name
     joinedAt: integer("joined_at").notNull().$defaultFn(now),
   },
   (t) => [
@@ -1122,7 +1122,7 @@ BalanceHistoryResponse = { items: { period: string; deltaCents: number; balanceC
   clientseitig noch einmal herzuleiten. Zwei Herleitungen desselben Betrags sind zwei Gelegenheiten,
   auseinanderzulaufen.
 * `includeAggregates=false` blendet Zeilen mit dem Tag `sammelbuchung` aus (die eine importierte
-  44.588,91-€-Sammelzeile). Für `/balance` ist der Default **true** — der aktuelle Saldo ist ohne sie
+  41.280,99-€-Sammelzeile). Für `/balance` ist der Default **true** — der aktuelle Saldo ist ohne sie
   falsch. Für `/balance/history` bietet die UI den Schalter an, weil die Zeile sonst jedes Diagramm
   plattdrückt.
 
@@ -1358,11 +1358,11 @@ sein muss.
 │                                      │
 │  Art                                 │   KindPicker, 2×2-Raster
 │  ┌───────────────┬────────────────┐  │   • jede Kachel min. 88 px hoch, volle Spaltenbreite
-│  │ Geteilt — ich │ Geteilt — Sandy│  │   • Icon + Titel + einzeilige Erklärung
+│  │ Geteilt — ich │ Geteilt — Robin│  │   • Icon + Titel + einzeilige Erklärung
 │  ├───────────────┼────────────────┤  │   • ausgewählt = Rahmen + Häkchen, nicht nur Farbe
-│  │ Für Sandy     │ Ausgleich      │  │   • radiogroup, Pfeiltasten, focus-visible
+│  │ Für Robin     │ Ausgleich      │  │   • radiogroup, Pfeiltasten, focus-visible
 │  └───────────────┴────────────────┘  │
-│  → Erklärzeile zur gewählten Art     │   z.B. "Ihr teilt 12,50 € — Sandy trägt 6,25 €"
+│  → Erklärzeile zur gewählten Art     │   z.B. "Ihr teilt 12,50 € — Robin trägt 6,25 €"
 │                                      │       (live berechnet, halfForOther aus @toon/shared)
 │  Beschreibung                        │   Input, 1..200
 │  ┌────────────────────────────────┐  │
@@ -1409,8 +1409,8 @@ sein muss.
 Drei Blöcke plus Kopfzeile.
 
 1. **Kopf**: `Switch` „Plan aktiv", darunter die Zusammenfassung der aktuellen Periode:
-   `Fixkosten gesamt 1.279,05 €` · `Einkommen gesamt 5.385,60 €` · `Quote 23,75 %` ·
-   **`Sandy zahlt 486,23 €`** groß hervorgehoben · `Eric trägt 792,82 €` als Komplement.
+   `Fixkosten gesamt 1.187,50 €` · `Einkommen gesamt 5.000,00 €` · `Quote 23,75 %` ·
+   **`Robin zahlt 470,86 €`** groß hervorgehoben · `Alex trägt 716,64 €` als Komplement.
    Zahler-Auswahl (`payerId`) und `startPeriod` in einem `ActionMenu`.
 2. **`Fixkosten`** — Liste der Positionen mit Label, Betrag, Gültigkeit (`ab 09/2025`, `09/2025–03/2026`).
    „Hinzufügen" und pro Zeile „Bearbeiten". **Bearbeiten schlägt vor, die alte Zeile zum Vormonat zu
@@ -2355,29 +2355,29 @@ Namentlich, mit den Vektornummern aus `docs/ledger-spec.md` §8:
 | --- | --- | --- |
 | `halfForOther: table of small amounts` | 1–7 | 100/101/1/0/−100/**−101**/−1 |
 | `halfForOther: the payer bears the odd cent in BOTH sign directions` | 6 | **`halfForOther(-101) === -50`, nicht `-51`** — die `Math.floor`-Falle, der wahrscheinlichste Bug dieses Repos |
-| `halfForOther: real rows from the sheet` | 8–10 | `B51 = −76 273 → −38 136` · `B9 = 39 615 → 19 807` · `E4 = 18 995 → 9 497` |
+| `halfForOther: real rows from the sheet` | 8–10 | `B51 = −68 451 → −34 225` · `B9 = 35 477 → 17 738` · `E4 = 16 233 → 8 116` |
 | `halfForOther + halfForPayer reconstruct the total` | 11 | Property über zufällige Beträge |
 | `halfForOther is odd-symmetric` | 12 | `halfForOther(−a) === −halfForOther(a)` |
-| `deltaForTransaction: one row per kind` | 13–19 | die sieben Einzelbeiträge inkl. `H47 = −46 844` |
+| `deltaForTransaction: one row per kind` | 13–19 | die sieben Einzelbeiträge inkl. `H47 = −41 206` |
 | `computeBalance: empty ledger is zero` | 20 | |
 | `computeBalance is antisymmetric` | 21 | `computeBalance(txs, p1) === −computeBalance(txs, p2)` |
 | `computeBalance is order-independent` | 22 | gemischte Reihenfolge, gleiches Ergebnis |
-| `column aggregates match the sheet` | 23–28 | `ΣB 3 148 217` · `Σ½B 1 574 092` · `ΣE 234 113` · `Σ½E 117 052` · `ΣH 571 807` · `ΣH ohne H79 568 914` |
-| `rent series expands to 50 periods` | 29–30 | 50 Zeilen, `2 441 570` ct, `2022-06` … `2026-07` |
-| `K4 settlement and total row count` | 31–32 | `4 458 891` ct · 310 Buchungen |
-| `end-to-end balance, both importer modes` | 33–37 | `11 526` ct · `8 633` ct · Referenz `8 645,5` · Delta `−12,5` ct in Toleranz · Delta `+2 893` exakt |
+| `column aggregates match the sheet` | 23–28 | `ΣB 2 874 355` · `Σ½B 1 437 161` · `ΣE 198 437` · `Σ½E 99 214` · `ΣH 492 618` · `ΣH ohne H79 489 471` |
+| `rent series expands to 50 periods` | 29–30 | 50 Zeilen, `2 307 376` ct, `2022-06` … `2026-07` |
+| `K4 settlement and total row count` | 31–32 | `4 128 099` ct · 310 Buchungen |
+| `end-to-end balance, both importer modes` | 33–37 | `9 842` ct · `6 695` ct · Referenz `8 645,5` · Delta `−12,5` ct in Toleranz · Delta `+3 147` exakt |
 | `isExpense excludes settlements` | 61 | Kategoriesummen ändern sich durch einen Ausgleich nicht |
 
 ### 7.3 Pflicht-Tests: Fixkostenplan — `packages/shared/test/plan.test.ts` + `period.test.ts`
 
 | Testname | Vektoren | Prüft |
 | --- | --- | --- |
-| `costTotal from the six seed items` | 38 | `127 905` ct |
-| `incomeTotal from both salaries` | 39 | `538 560` ct |
+| `costTotal from the six seed items` | 38 | `118 750` ct |
+| `incomeTotal from both salaries` | 39 | `500 000` ct |
 | `quote formats as de-DE percent` | 40 | `"23,75 %"` aus dem Bruch, nie aus einem Float |
-| `share(P2) matches R11 to the cent` | 41 | `48 623` ct, exakter Quotient `48 623,1845…` |
-| `share(P1) matches R10 to the cent` | 42 | `79 282` ct |
-| `the two shares hit costTotal exactly` | 43 | `48 623 + 79 282 === 127 905` — **kein Cent verloren** |
+| `share(P2) matches R11 to the cent` | 41 | `47 086` ct, exakter Quotient `48 623,1845…` |
+| `share(P1) matches R10 to the cent` | 42 | `71 664` ct |
+| `the two shares hit costTotal exactly` | 43 | `47 086 + 71 664 === 118 750` — **kein Cent verloren** |
 | `payerShare is the complement, not a second rounding` | 44 | identisch zu 42, aber über `costTotal − other` |
 | `the payer absorbs the residual cent` | 45 | `costTotal 100 001`, `50 000/50 000` → other `50 001`, payer `50 000` |
 | `divRoundHalfAwayFromZero rounds away from zero` | 46 | `(5,2) → 3`, `(−5,2) → −3` |
@@ -2400,7 +2400,7 @@ Namentlich, mit den Vektornummern aus `docs/ledger-spec.md` §8:
 
 ### 7.5 Pflicht-Tests: Ausgleich und Saldo — `apps/api/test/settlements.test.ts` + `balance.test.ts`
 
-Vektoren 56–61: voller Ausgleich auf 0 · Teilzahlung `11 526 → 6 526` · Überzahlung `→ −3 474` (erlaubt,
+Vektoren 56–61: voller Ausgleich auf 0 · Teilzahlung `9 842 → 6 526` · Überzahlung `→ −3 474` (erlaubt,
 UI benennt es) · negativer Saldo, Zahler ist P1 · stale `expectedBalanceCents` → `409 balance_stale`,
 **nichts geschrieben** · Settlements sind aus Kategoriesummen ausgeschlossen.
 
@@ -2417,13 +2417,13 @@ aus dem Blatt, inklusive der drei Härtefälle: `Amazon27.01.23` ohne Leerzeiche
 `Kalender 2025` (nackte Jahreszahl ist **kein** Datumsbeleg, Fallback auf den Anker darüber).
 Gesamtverteilung `56 day / 14 month / 193 estimated`, Ankerzahl pro Spalte `A 16, D 3, G 20`.
 
-Vektoren 78–87: die Textzelle `"28,93" → 2 893`,
+Vektoren 78–87: die Textzelle `"31,47" → 3 147`,
 die vier Formelzellen über ihren **gecachten** Wert, `"80.430000000000007" → 8 043`,
 `"abc"` wirft `unparsable_amount`, fehlende Zelle landet in `skipped_no_amount`, und der deutsche
 Eingabeparser (`"1.234,56"` / `"1234,56"` / `"1234.56"` / `"-12,5"`).
 
 Vektoren 88–99, inklusive der Reihenfolge-Fälle
-(`Katzen Amazon` → `tiere`, `Sabine Karten` → `geschenke` **vor** `hobby_kreativ`, `Autoversicherung` →
+(`Katzen Amazon` → `tiere`, `Nadja Karten` → `geschenke` **vor** `hobby_kreativ`, `Autoversicherung` →
 `versicherung` **vor** `mobilitaet`) und der Gesamtabdeckung 243/263.
 
 Der Lauf gegen eine Temp-Datei-DB (die geteilte `bun test`-DB ist unter `NODE_ENV=test` bereits eine
@@ -2487,14 +2487,14 @@ Headless-Browser bei 390 px nachsehen.
    Nutzer widerspricht, ist es eine Zeile.
 2. **Die neun Monate zwischen Einzug (2021-09) und `2022-06` bleiben leer.** Vermutlich stecken sie in
    `A16 Miete 5 500,00`. *Empfehlung:* nichts erfinden; der Importer weist die Lücke im Report aus.
-3. **Keine der sechs Fixkostenpositionen aus `R8`s Formel ist im Blatt benannt** (nicht nur `124,00`
-   und die beiden `14,99` — auch `1060`, `46,71` und `18,36` nicht). **Umgesetzt** (Review-Befund,
+3. **Keine der sechs Fixkostenpositionen aus `R8`s Formel ist im Blatt benannt** (nicht nur `150,00`
+   und die beiden `5,00` — auch `950`, `55,00` und `22,50` nicht). **Umgesetzt** (Review-Befund,
    `apps/api/scripts/import-xlsx.ts`s `seedFixedCostPlan`, Labels exakt wie in `docs/ledger-spec.md`
-   §4.1 festgelegt): `Miete` (1060), `Nebenkosten` (124), `Strom` (46,71), `Internet` (18,36),
-   `Streaming 1`/`Streaming 2` (je 14,99). Der Betrag ist in jedem Fall richtig, nur das Etikett ist
+   §4.1 festgelegt): `Miete` (950), `Nebenkosten` (150), `Strom` (55,00), `Internet` (22,50),
+   `Streaming 1`/`Streaming 2` (je 5,00). Der Betrag ist in jedem Fall richtig, nur das Etikett ist
    eine Wahl dieses Importers — der Nutzer benennt beim ersten Öffnen von `/plan` um, falls er
    widerspricht.
-4. **`H79` = 28,93 € wird per Default zurückgeholt**, der importierte Saldo liegt damit 28,93 € über
+4. **`H79` = 31,47 € wird per Default zurückgeholt**, der importierte Saldo liegt damit 31,47 € über
    `K21`. *Empfehlung:* dabei bleiben. Die Zahl ist seit April 2025 unsichtbar, weil Excels `SUM`
    Textzellen überspringt — das still zu reproduzieren wäre genau der Defekt, den die App beheben soll.
    `--excel-text-quirk` existiert nur, damit der Operator die Blattzahl nachstellen kann.

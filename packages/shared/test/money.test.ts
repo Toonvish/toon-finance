@@ -27,19 +27,19 @@ test("halfForOther: the payer bears the odd cent in BOTH sign directions", () =>
 });
 
 describe("halfForOther: real rows from the sheet", () => {
-  test("B51 = -76 273 -> -38 136", () => {
-    expect(halfForOther(SAMPLE_ROWS.b51)).toBe(-38_136);
-    expect(halfForPayer(SAMPLE_ROWS.b51)).toBe(-38_137);
+  test("B51 = -68 451 -> -34 225", () => {
+    expect(halfForOther(SAMPLE_ROWS.b51)).toBe(-34_225);
+    expect(halfForPayer(SAMPLE_ROWS.b51)).toBe(-34_226);
   });
 
-  test("B9 = 39 615 -> 19 807", () => {
-    expect(halfForOther(SAMPLE_ROWS.b9)).toBe(19_807);
-    expect(halfForPayer(SAMPLE_ROWS.b9)).toBe(19_808);
+  test("B9 = 35 477 -> 17 738", () => {
+    expect(halfForOther(SAMPLE_ROWS.b9)).toBe(17_738);
+    expect(halfForPayer(SAMPLE_ROWS.b9)).toBe(17_739);
   });
 
-  test("E4 = 18 995 -> 9 497", () => {
-    expect(halfForOther(SAMPLE_ROWS.e4)).toBe(9_497);
-    expect(halfForPayer(SAMPLE_ROWS.e4)).toBe(9_498);
+  test("E4 = 16 233 -> 8 116", () => {
+    expect(halfForOther(SAMPLE_ROWS.e4)).toBe(8_116);
+    expect(halfForPayer(SAMPLE_ROWS.e4)).toBe(8_117);
   });
 });
 
@@ -69,8 +69,8 @@ describe("divRoundHalfAwayFromZero", () => {
   });
 
   test("matches the income-share worked example from docs/ledger-spec.md §4.2", () => {
-    expect(divRoundHalfAwayFromZero(204_734 * 127_905, 538_560)).toBe(48_623);
-    expect(divRoundHalfAwayFromZero(333_826 * 127_905, 538_560)).toBe(79_282);
+    expect(divRoundHalfAwayFromZero(198_255 * 118_750, 500_000)).toBe(47_086);
+    expect(divRoundHalfAwayFromZero(301_745 * 118_750, 500_000)).toBe(71_664);
   });
 });
 

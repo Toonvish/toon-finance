@@ -22,7 +22,7 @@
  * itself, so an operator can convince themselves the rest of the pipeline is
  * faithful (docs/ledger-spec.md §6.7). The DEFAULT import always recovers
  * that amount — the whole reason this importer exists is to fix that quiet
- * 28.93 EUR bug, not to reproduce it.
+ * 31.47 EUR bug, not to reproduce it.
  */
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
@@ -100,8 +100,8 @@ interface ColumnSpec {
 
 const COLUMNS: readonly ColumnSpec[] = [
   { label: "A/B  Ausgaben", labelCol: "A", amountCol: "B", payer: "P1", splitMode: "SPLIT_EQUAL", externalKeyPrefix: "xlsx:B" },
-  { label: "D/E  Schafi gezahlt", labelCol: "D", amountCol: "E", payer: "P2", splitMode: "SPLIT_EQUAL", externalKeyPrefix: "xlsx:E" },
-  { label: "G/H  Schafi Extra", labelCol: "G", amountCol: "H", payer: "P1", splitMode: "OTHER_ONLY", externalKeyPrefix: "xlsx:H" },
+  { label: "D/E  Partner gezahlt", labelCol: "D", amountCol: "E", payer: "P2", splitMode: "SPLIT_EQUAL", externalKeyPrefix: "xlsx:E" },
+  { label: "G/H  Partner Extra", labelCol: "G", amountCol: "H", payer: "P1", splitMode: "OTHER_ONLY", externalKeyPrefix: "xlsx:H" },
 ];
 
 /* -------------------------------------------------------------------------- */
@@ -189,14 +189,14 @@ function extractRentSeries(workbook: XlsxWorkbook): RentSeriesPair[] {
 /**
  * The Q5:R11 income block — the reason this app exists (docs/ledger-spec.md
  * §4.2). `R8` is not a plain amount cell: its FORMULA TEXT is the six named
- * fixed-cost line items, written as a bare sum (`"1060+124+46.71+18.36+14.99
- * +14.99"`), never as six separate cells — this is the only way to recover
+ * fixed-cost line items, written as a bare sum (`"950+150+55.00+22.50+5.00
+ * +5.00"`), never as six separate cells — this is the only way to recover
  * them individually instead of just their total.
  */
 export interface PlanSeed {
-  /** R5 — P1 (Eric)'s salary. */
+  /** R5 — P1 (Alex)'s salary. */
   ownerSalaryCents: number;
-  /** R6 — P2 (Sandy)'s salary. */
+  /** R6 — P2 (Robin)'s salary. */
   partnerSalaryCents: number;
   /** R8's six summands, in sheet order. NONE of them is labelled anywhere in
    * the sheet (docs/spec.md §8.1 #3) — `fixedCostItemLabels()` assigns the
@@ -206,7 +206,7 @@ export interface PlanSeed {
   /** The period this salary/cost snapshot has been valid since — derived,
    * not guessed: the first period of the trailing run in the rent series
    * that already books at R11's exact amount (docs/ledger-spec.md §4.2's
-   * "genau diese 486,23 taucht als letzte Zeile der Mietserie auf"). */
+   * "genau diese 470,86 taucht als letzte Zeile der Mietserie auf"). */
   validSincePeriod: string;
   /** `nextPeriod(lastRentPeriod)` — the first period the imported rent series
    * did NOT already cover, and therefore the only safe `fixed_cost_plans
@@ -215,7 +215,7 @@ export interface PlanSeed {
   planStartPeriod: string;
 }
 
-/** Splits `R8`'s formula text (`"1060+124+46.71+…"`) into its six cent amounts. */
+/** Splits `R8`'s formula text (`"950+150+55.00+…"`) into its six cent amounts. */
 function parseFixedCostFormulaCents(formula: string): number[] {
   return formula.split("+").map((token) => {
     const value = Number(token.trim());
@@ -263,11 +263,11 @@ function extractPlanSeed(workbook: XlsxWorkbook, rentBookings: { period: string;
  * first opening `/plan` (categories.renameHint's pattern, docs/spec.md §8.1 #5).
  */
 function fixedCostItemLabels(amountsCents: readonly number[]): string[] {
-  const knownLabels: Record<number, string> = { 106_000: "Miete", 12_400: "Nebenkosten", 4_671: "Strom", 1_836: "Internet" };
+  const knownLabels: Record<number, string> = { 95_000: "Miete", 15_000: "Nebenkosten", 5_500: "Strom", 2_250: "Internet" };
   let streamingSeen = 0;
   return amountsCents.map((amountCents) => {
     if (knownLabels[amountCents]) return knownLabels[amountCents]!;
-    if (amountCents === 1_499) {
+    if (amountCents === 500) {
       streamingSeen += 1;
       return `Streaming ${streamingSeen}`;
     }
@@ -465,7 +465,7 @@ function printReport(workbook: XlsxWorkbook, defaultResult: ImportResult, quirkR
       }
     }
   }
-  console.log(`  M/N  Schafi Miete       ${String(defaultResult.rentSeries.bookings).padStart(3)} tx   ${formatCents(defaultResult.rentSeries.sumCents).padStart(14)}`);
+  console.log(`  M/N  Partner Miete       ${String(defaultResult.rentSeries.bookings).padStart(3)} tx   ${formatCents(defaultResult.rentSeries.sumCents).padStart(14)}`);
   console.log(`  K4   überwiesen           1 tx   ${formatCents(defaultResult.transferCents).padStart(14)}`);
 
   const totalTx = defaultResult.records.length;
@@ -494,7 +494,7 @@ function printReport(workbook: XlsxWorkbook, defaultResult: ImportResult, quirkR
     console.log(`  Sheet K21 (Excel semantics)                    ${formatCents(Math.round(k21Cents)).padStart(14)}   (${k21Cents.toFixed(1)} ct)`);
   }
   console.log(`  Importer, --excel-text-quirk (H79 excluded)    ${formatCents(quirkResult.balanceCents).padStart(14)}   (${quirkResult.balanceCents} ct)`);
-  console.log(`  Importer, default (H79 = "28,93" recovered)    ${formatCents(defaultResult.balanceCents).padStart(14)}   (${defaultResult.balanceCents} ct)`);
+  console.log(`  Importer, default (H79 = "31,47" recovered)    ${formatCents(defaultResult.balanceCents).padStart(14)}   (${defaultResult.balanceCents} ct)`);
 
   if (k21Cents !== undefined) {
     const quirkDeltaCents = quirkResult.balanceCents - k21Cents;

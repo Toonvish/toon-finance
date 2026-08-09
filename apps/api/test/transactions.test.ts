@@ -179,7 +179,7 @@ describe("generated rows are protected", () => {
       householdId,
       payerId: owner.id,
       splitMode: "OTHER_ONLY",
-      amountCents: 48_623,
+      amountCents: 47_086,
       description: "Fixkostenanteil 08/2026",
       bookedAt: Date.now(),
       dateSource: "exact",

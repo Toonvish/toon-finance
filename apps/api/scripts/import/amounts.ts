@@ -6,7 +6,7 @@
  * This is deliberately narrower than `@toon/shared`'s `parseGermanAmount`
  * (the general-purpose UI input parser): a spreadsheet cell is either a
  * number, a formula's cached number, or — in exactly one known case (`H79`,
- * `"28,93"`) — a shared string holding a bare German-decimal-comma amount.
+ * `"31,47"`) — a shared string holding a bare German-decimal-comma amount.
  * Anything else is a parsing bug, not a format this importer should guess
  * its way through (docs/ledger-spec.md §6.2: "a silently dropped amount is
  * exactly the bug the sheet already has").

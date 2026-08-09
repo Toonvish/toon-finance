@@ -7,26 +7,22 @@
  * a second time.
  *
  * The exception is the write path (docs/spec.md §7.6), which needs a whole
- * workbook and a real database — `bun test`'s `db` already IS a fresh
- * temp-file DB (env.ts's `defaultTestDatabaseUrl()`). It is covered TWICE, on
- * purpose, because the two runs prove different things:
+ * workbook and a real database — `bun test`'s `db` already IS a fresh temp-file
+ * DB (env.ts's `defaultTestDatabaseUrl()`). It runs against a SYNTHETIC workbook
+ * (`support/synthetic-workbook.ts`): invented amounts, same shape, generated at
+ * test time, so it runs in CI too. That is what guards idempotency on
+ * `(householdId, externalKey)` rather than `externalKey` alone, per-household
+ * scoping, the plan seed coming from `R8`'s FORMULA instead of its cached value,
+ * the `--excel-text-quirk` switch, and the CLI wiring. The first two were real
+ * bugs; both are caught here today.
  *
- *   1. Against a SYNTHETIC workbook (`support/synthetic-workbook.ts`), always,
- *      including CI. Invented amounts, same shape. This is what actually
- *      guards the write path — idempotency on `(householdId, externalKey)`
- *      rather than `externalKey` alone, per-household scoping, the plan seed
- *      coming out of `R8`'s formula instead of its cached value, the
- *      `--excel-text-quirk` switch, the CLI wiring. Both of those first two
- *      were real bugs, and both are caught by this block today.
- *   2. Against the REAL `Haushalt.xlsx`, when it happens to be next to the
- *      repo. That run proves one thing the synthetic one never can: that
- *      `packages/shared/test/fixtures/haushalt-xlsx.ts` still agrees with the
- *      sheet those numbers were extracted from. The workbook is the operator's
- *      household finances and is gitignored, so this block SKIPS on a fresh
- *      clone — a generated workbook could not stand in for it without the
- *      check becoming a tautology.
+ * There used to be a second run against the real `Haushalt.xlsx`, whose only
+ * unique job was proving that `packages/shared/test/fixtures/haushalt-xlsx.ts`
+ * still matched the sheet its numbers came from. Those fixture numbers are now
+ * invented too (see that file's header), so the comparison had nothing left to
+ * compare and was removed rather than left to rot as a tautology.
  */
-import { existsSync, rmSync } from "node:fs";
+import { rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, test } from "bun:test";
@@ -79,8 +75,8 @@ function sharedStringCell(ref: string, idx: number): XlsxCell {
 }
 
 describe("parseAmountCell (docs/ledger-spec.md §6.2, §8.9)", () => {
-  test("#78 H79 shared string \"28,93\" -> 2893 ct", () => {
-    expect(parseAmountCell(sharedStringCell("H79", 0), ["28,93"])).toBe(2893);
+  test("#78 H79 shared string \"31,47\" -> 3147 ct", () => {
+    expect(parseAmountCell(sharedStringCell("H79", 0), ["31,47"])).toBe(3147);
   });
 
   test("#79 B3 plain integer text \"1693\" -> 169300 ct", () => {
@@ -116,19 +112,19 @@ describe("parseAmountCell (docs/ledger-spec.md §6.2, §8.9)", () => {
   });
 
   test("negative amounts keep their sign (docs/ledger-spec.md §1.6)", () => {
-    expect(parseAmountCell(numericCell("B51", "-762.73"), [])).toBe(-76273);
+    expect(parseAmountCell(numericCell("B51", "-684.51"), [])).toBe(-68451);
   });
 
   test("--excel-text-quirk treats the shared-string cell as empty, reproducing Excel's SUM", () => {
-    expect(parseAmountCell(sharedStringCell("H79", 0), ["28,93"], { excelTextQuirk: true })).toBeNull();
+    expect(parseAmountCell(sharedStringCell("H79", 0), ["31,47"], { excelTextQuirk: true })).toBeNull();
   });
 
   test("fixture cross-check: column B sum matches K13", () => {
     const cents = [SAMPLE_ROWS.b9, SAMPLE_ROWS.b51];
     expect(cents.reduce((a, b) => a + b, 0)).toBe(SAMPLE_ROWS.b9 + SAMPLE_ROWS.b51);
-    expect(COLUMN_B.sumCents).toBe(3_148_217);
-    expect(COLUMN_E.sumCents).toBe(234_113);
-    expect(COLUMN_H.sumCentsIncludingH79).toBe(571_807);
+    expect(COLUMN_B.sumCents).toBe(2_874_355);
+    expect(COLUMN_E.sumCents).toBe(198_437);
+    expect(COLUMN_H.sumCentsIncludingH79).toBe(492_618);
   });
 });
 
@@ -314,14 +310,14 @@ describe("categorize (docs/ledger-spec.md §7.2, §8.10)", () => {
     ["#90 Tierarzt Blutabnahme", "Tierarzt Blutabnahme", "tiere"],
     ["#91 Amazon Spiegel", "Amazon Spiegel", "moebel_wohnen"],
     ["#92 Amazon alone -> sonstiges (marketplace names never guessed)", "Amazon", "sonstiges"],
-    ["#93 Sabine Karten -> geschenke before hobby_kreativ's karten", "Sabine Karten", "geschenke"],
+    ["#93 Nadja Karten -> geschenke before hobby_kreativ's karten", "Nadja Karten", "geschenke"],
     ["#94 Faltkarten 1.12", "Faltkarten 1.12", "hobby_kreativ"],
-    ["#95 SandyPC", "SandyPC", "elektronik"],
+    ["#95 RobinPC", "RobinPC", "elektronik"],
     ["#96 Autoversicherung -> versicherung before mobilitaet's \\bauto\\b", "Autoversicherung", "versicherung"],
     ["#97 Strom Rückerstattung 2025", "Strom Rückerstattung 2025", "nebenkosten"],
     ["#98 Rückzahlung", "Rückzahlung", "ausgleich"],
     ["Blumen Häckeln -> geschenke before hobby_kreativ (accepted misfire)", "Blumen Häckeln", "geschenke"],
-    ["HandyHülle Sabine -> geschenke rather than elektronik (accepted misfire)", "HandyHülle Sabine", "geschenke"],
+    ["HandyHülle Nadja -> geschenke rather than elektronik (accepted misfire)", "HandyHülle Nadja", "geschenke"],
   ])("%s", (_name, label, expectedSlug) => {
     expect(categorize(label).slug).toBe(expectedSlug);
   });
@@ -332,8 +328,8 @@ describe("categorize (docs/ledger-spec.md §7.2, §8.10)", () => {
     expect(result.matched).toBe(false);
   });
 
-  test("`gez` is a word, not a substring — the sheet's own \"Schafi gezahlt\" is not a tax", () => {
-    expect(categorize("Schafi gezahlt").slug).not.toBe("steuern_abgaben");
+  test("`gez` is a word, not a substring — the sheet's own \"Partner gezahlt\" is not a tax", () => {
+    expect(categorize("Partner gezahlt").slug).not.toBe("steuern_abgaben");
     expect(categorize("Sofa abgezogen").slug).not.toBe("steuern_abgaben");
     // …while the real thing still matches, bounded or hyphenated.
     expect(categorize("GEZ").slug).toBe("steuern_abgaben");
@@ -347,7 +343,7 @@ describe("categorize (docs/ledger-spec.md §7.2, §8.10)", () => {
 /* -------------------------------------------------------------------------- */
 
 describe("expandRentSeries (docs/ledger-spec.md §6.5, §8.3)", () => {
-  test("#29/#30 14 pairs expand to 50 rows, 2022-06 .. 2026-07, sum 2 441 570 ct", () => {
+  test("#29/#30 14 pairs expand to 50 rows, 2022-06 .. 2026-07, sum 2 307 376 ct", () => {
     const bookings = expandRentSeries([...RENT_SERIES]);
     expect(bookings.length).toBe(RENT_SERIES_ROW_COUNT);
     expect(bookings[0]!.period).toBe(FIXTURE_RENT_SERIES_START);
@@ -357,11 +353,11 @@ describe("expandRentSeries (docs/ledger-spec.md §6.5, §8.3)", () => {
     expect(sum).toBe(RENT_SERIES_SUM_CENTS);
   });
 
-  test("the last row's amount matches the currently-valid income-proportional share (486.23 x 11)", () => {
+  test("the last row's amount matches the currently-valid income-proportional share (470.86 x 11)", () => {
     const bookings = expandRentSeries([...RENT_SERIES]);
     const lastEleven = bookings.slice(-11);
     expect(lastEleven).toHaveLength(11);
-    for (const booking of lastEleven) expect(booking.amountCents).toBe(48_623);
+    for (const booking of lastEleven) expect(booking.amountCents).toBe(47_086);
   });
 
   test("periods are contiguous with no gaps or repeats", () => {
@@ -376,7 +372,7 @@ describe("expandRentSeries (docs/ledger-spec.md §6.5, §8.3)", () => {
 /* -------------------------------------------------------------------------- */
 
 test("K4 transfer total matches the shared fixture (docs/ledger-spec.md §6.6, §8.3 #31)", () => {
-  expect(TRANSFER_TOTAL_CENTS).toBe(4_458_891);
+  expect(TRANSFER_TOTAL_CENTS).toBe(4_128_099);
 });
 
 test("toPeriod round-trips a CalendarDate", () => {
@@ -398,8 +394,6 @@ test("toPeriod round-trips a CalendarDate", () => {
  * fixture and the real sheet still agree, and they run only for whoever has
  * the file lying next to the repo root.
  */
-const HAUSHALT_XLSX_PATH = `${import.meta.dir}/../../../Haushalt.xlsx`;
-const HAS_WORKBOOK = existsSync(HAUSHALT_XLSX_PATH);
 const REAL_IMPORT_DATE: CalendarDate = { year: 2026, month: 8, day: 9 }; // pinned, not todayBerlin() — deterministic
 
 async function joinAsSecondMember(owner: TestUser, householdId: string, member: TestUser): Promise<void> {
@@ -436,21 +430,21 @@ afterAll(() => rmSync(SYNTHETIC_XLSX_PATH, { force: true }));
 /*
  * A/B  P1 pays, SPLIT_EQUAL:  100,00 + 50,01 − 20,00      (row 5 has no amount -> skipped)
  * D/E  P2 pays, SPLIT_EQUAL:  30,00 + 25,00 (cached formula)
- * G/H  P1 pays, OTHER_ONLY:   40,00 + 28,93 (TEXT cell)
+ * G/H  P1 pays, OTHER_ONLY:   40,00 + 31,47 (TEXT cell)
  * M/N  rent, OTHER_ONLY:      2 × 100,00 + 3 × 200,00     -> 2022-06 .. 2022-10
  * K4   SETTLEMENT:            500,00
  *
  * rows            = 3 + 2 + 2 + 5 + 1                              = 13
  * splitOther      = +(5000 + 2500 − 1000) − (1500 + 1250)          = +3750
  *                     └ halfForOther(5001) = 2500: the payer keeps the odd cent
- * forOther        = (4000 + 2893) + (2×10000 + 3×20000)            = +86 893
+ * forOther        = (4000 + 3147) + (2×10000 + 3×20000)            = +87 147
  * settled         = −50 000
- * balance         = 3750 + 86 893 − 50 000                         = +40 643
+ * balance         = 3750 + 87 147 − 50 000                         = +40 897
  */
 const SYNTHETIC_ROW_COUNT = 13;
-const SYNTHETIC_BALANCE_CENTS = 40_643;
+const SYNTHETIC_BALANCE_CENTS = 40_897;
 /** The one text-typed cell, the only thing `--excel-text-quirk` may change. */
-const SYNTHETIC_TEXT_CELL_CENTS = 2_893;
+const SYNTHETIC_TEXT_CELL_CENTS = 3_147;
 
 describe("writeImportRecords against a synthetic workbook (docs/spec.md §7.6)", () => {
   test("reads the shape correctly: 13 rows, hand-derived balance, nothing unparsable", () => {
@@ -595,148 +589,3 @@ describe("writeImportRecords against a synthetic workbook (docs/spec.md §7.6)",
   });
 });
 
-describe.skipIf(!HAS_WORKBOOK)("writeImportRecords against the real Haushalt.xlsx (docs/spec.md §7.6)", () => {
-  test("writes exactly 310 rows once; re-running the same import writes nothing", async () => {
-    const owner = await createUser("Owner");
-    const partner = await createUser("Partner");
-    const householdId = await createHousehold(owner, "Xlsx Import");
-    await joinAsSecondMember(owner, householdId, partner);
-
-    const workbook = readWorkbook(HAUSHALT_XLSX_PATH);
-    const result = buildImport(workbook, false, REAL_IMPORT_DATE);
-
-    // The three reconciliation figures from ledger-spec.md §6.7, cross-checked
-    // against the same numbers packages/shared/test/ledger.test.ts derives
-    // from the hand-built fixture — this is what proves the fixture and the
-    // real workbook actually agree.
-    expect(result.records).toHaveLength(310);
-    expect(result.balanceCents).toBe(11_526);
-    expect(result.unparsable).toHaveLength(0);
-
-    const firstRun = await writeImportRecords(db, householdId, result.records);
-    expect(firstRun.inserted).toBe(310);
-    expect(firstRun.alreadyPresent).toBe(0);
-
-    const rowsAfterFirstRun = await db
-      .select({ id: transactions.id })
-      .from(transactions)
-      .where(and(eq(transactions.householdId, householdId), eq(transactions.origin, "import")));
-    expect(rowsAfterFirstRun).toHaveLength(310);
-
-    // A second run against the SAME household writes nothing new.
-    const secondRun = await writeImportRecords(db, householdId, result.records);
-    expect(secondRun.inserted).toBe(0);
-    expect(secondRun.alreadyPresent).toBe(310);
-
-    const rowsAfterSecondRun = await db
-      .select({ id: transactions.id })
-      .from(transactions)
-      .where(and(eq(transactions.householdId, householdId), eq(transactions.origin, "import")));
-    expect(rowsAfterSecondRun).toHaveLength(310); // still 310 — nothing doubled
-  });
-
-  test("--dry-run's read path (buildImport alone) never writes: calling it repeatedly changes nothing in the DB", async () => {
-    const workbook = readWorkbook(HAUSHALT_XLSX_PATH);
-    const before = await db.select({ id: transactions.id }).from(transactions);
-    buildImport(workbook, false, REAL_IMPORT_DATE);
-    buildImport(workbook, true, REAL_IMPORT_DATE);
-    const after = await db.select({ id: transactions.id }).from(transactions);
-    expect(after.length).toBe(before.length); // buildImport touches no table at all
-  });
-
-  test("is scoped per household — a second household importing the same workbook is not swallowed by the first's externalKeys (review finding)", async () => {
-    const ownerA = await createUser("OwnerA");
-    const partnerA = await createUser("PartnerA");
-    const householdA = await createHousehold(ownerA, "Haushalt A");
-    await joinAsSecondMember(ownerA, householdA, partnerA);
-
-    const ownerB = await createUser("OwnerB");
-    const partnerB = await createUser("PartnerB");
-    const householdB = await createHousehold(ownerB, "Haushalt B");
-    await joinAsSecondMember(ownerB, householdB, partnerB);
-
-    const workbook = readWorkbook(HAUSHALT_XLSX_PATH);
-    const result = buildImport(workbook, false, REAL_IMPORT_DATE);
-
-    const a = await writeImportRecords(db, householdA, result.records);
-    expect(a.inserted).toBe(310);
-
-    // Household B must import its OWN 310 rows — the bug this test guards
-    // against reported all 310 as "already present" (seeing household A's
-    // rows under the same `xlsx:*` externalKeys) and silently wrote nothing.
-    const b = await writeImportRecords(db, householdB, result.records);
-    expect(b.inserted).toBe(310);
-    expect(b.alreadyPresent).toBe(0);
-
-    const rowsB = await db
-      .select({ id: transactions.id })
-      .from(transactions)
-      .where(and(eq(transactions.householdId, householdB), eq(transactions.origin, "import")));
-    expect(rowsB).toHaveLength(310);
-  });
-
-  test("seeds the fixed-cost plan from Q5:R11 so it can actually run (review finding: importer never seeded the plan)", async () => {
-    const owner = await createUser("Owner");
-    const partner = await createUser("Partner");
-    const householdId = await createHousehold(owner, "Plan Seed");
-    await joinAsSecondMember(owner, householdId, partner);
-
-    const workbook = readWorkbook(HAUSHALT_XLSX_PATH);
-    const result = buildImport(workbook, false, REAL_IMPORT_DATE);
-
-    // The exact figures from ledger-spec.md §6.7 / the task brief's Q5:R11 block.
-    expect(result.planSeed.ownerSalaryCents).toBe(333_826);
-    expect(result.planSeed.partnerSalaryCents).toBe(204_734);
-    expect(result.planSeed.fixedCostItemCents).toEqual([106_000, 12_400, 4_671, 1_836, 1_499, 1_499]);
-    expect(result.planSeed.fixedCostItemCents.reduce((a, b) => a + b, 0)).toBe(127_905);
-    expect(result.planSeed.validSincePeriod).toBe("2025-09");
-    expect(result.planSeed.planStartPeriod).toBe("2026-08"); // nextPeriod(2026-07), the rent series' last period
-
-    const seedResult = await seedFixedCostPlan(db, householdId, result.planSeed);
-    expect(seedResult.seeded).toBe(true);
-    expect(seedResult.itemCount).toBe(6);
-    expect(seedResult.incomeCount).toBe(2);
-
-    const items = await db.select().from(fixedCostItems).where(eq(fixedCostItems.householdId, householdId));
-    expect(items).toHaveLength(6);
-    expect(items.reduce((sum, item) => sum + item.amountCents, 0)).toBe(127_905);
-    expect(items.find((i) => i.amountCents === 106_000)?.label).toBe("Miete");
-
-    const incomeRows = await db.select().from(incomes).where(eq(incomes.householdId, householdId));
-    expect(incomeRows).toHaveLength(2);
-    expect(incomeRows.reduce((sum, i) => sum + i.amountCents, 0)).toBe(538_560);
-
-    const planRows = await db.select().from(fixedCostPlans).where(eq(fixedCostPlans.householdId, householdId));
-    expect(planRows[0]?.enabled).toBe(true);
-    expect(planRows[0]?.startPeriod).toBe("2026-08");
-
-    // Idempotent: seeding an already-seeded household changes nothing.
-    const secondSeed = await seedFixedCostPlan(db, householdId, result.planSeed);
-    expect(secondSeed.seeded).toBe(false);
-    const itemsAfter = await db.select({ id: fixedCostItems.id }).from(fixedCostItems).where(eq(fixedCostItems.householdId, householdId));
-    expect(itemsAfter).toHaveLength(6);
-
-    // GET /plan/preview confirms the seeded data actually computes the right share.
-    const preview = await body<{ bookableCents: number; costTotalCents: number; incomeTotalCents: number }>(
-      await call(`/api/households/${householdId}/plan/preview?period=2026-08`, { cookie: owner.cookie }),
-    );
-    expect(preview.costTotalCents).toBe(127_905);
-    expect(preview.incomeTotalCents).toBe(538_560);
-    expect(preview.bookableCents).toBe(48_623);
-  });
-});
-
-describe.skipIf(!HAS_WORKBOOK)("the CLI entry point (import.meta.main guard)", () => {
-  test("--dry-run without --household exits 0 and performs no write, via the real subprocess", async () => {
-    const proc = Bun.spawnSync({
-      cmd: ["bun", "run", "apps/api/scripts/import-xlsx.ts", "Haushalt.xlsx", "--dry-run"],
-      cwd: `${import.meta.dir}/../../..`,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const stdout = proc.stdout.toString();
-    expect(proc.exitCode).toBe(0);
-    expect(stdout).toContain("Total transactions: 310");
-    expect(stdout).toContain("no --household given: no database write performed.");
-  });
-});

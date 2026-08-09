@@ -14,7 +14,7 @@ export function normalizeTagName(name: string): string {
 }
 
 /**
- * Marks an imported lump-sum settlement row (the one `44 588,91 €` "Schafi
+ * Marks an imported lump-sum settlement row (the one `44 588,91 €` "Partner
  * überwiesen" transaction, docs/ledger-spec.md §6.6) so a chart can offer a
  * "hide aggregate bookings" toggle without it drowning out every other bar.
  */

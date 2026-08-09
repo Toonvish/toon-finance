@@ -58,17 +58,17 @@ async function seedFullPlan(owner: TestUser, partner: TestUser, householdId: str
   await call(`/api/households/${householdId}/plan/items`, {
     method: "POST",
     cookie: owner.cookie,
-    body: { label: "Fixkosten Gesamt", amountCents: 127_905, activeFrom: "2026-01" },
+    body: { label: "Fixkosten Gesamt", amountCents: 118_750, activeFrom: "2026-01" },
   });
   await call(`/api/households/${householdId}/plan/incomes`, {
     method: "POST",
     cookie: owner.cookie,
-    body: { personId: owner.id, amountCents: 333_826, validFrom: "2026-01" },
+    body: { personId: owner.id, amountCents: 301_745, validFrom: "2026-01" },
   });
   await call(`/api/households/${householdId}/plan/incomes`, {
     method: "POST",
     cookie: owner.cookie,
-    body: { personId: partner.id, amountCents: 204_734, validFrom: "2026-01" },
+    body: { personId: partner.id, amountCents: 198_255, validFrom: "2026-01" },
   });
   const enabled = await call(`/api/households/${householdId}/plan`, { method: "PATCH", cookie: owner.cookie, body: { enabled: true } });
   expect(enabled.status).toBe(200);
@@ -124,9 +124,9 @@ describe("the income-proportional share", () => {
     await seedFullPlan(owner, partner, householdId);
 
     const plan = await body<PlanResponse>(await call(`/api/households/${householdId}/plan`, { cookie: owner.cookie }));
-    expect(plan.current?.costTotalCents).toBe(127_905);
-    expect(plan.current?.incomeTotalCents).toBe(538_560);
-    expect(plan.current?.bookableCents).toBe(48_623); // = ledger-spec.md's "share(P2)"
+    expect(plan.current?.costTotalCents).toBe(118_750);
+    expect(plan.current?.incomeTotalCents).toBe(500_000);
+    expect(plan.current?.bookableCents).toBe(47_086); // = ledger-spec.md's "share(P2)"
   });
 });
 
@@ -143,7 +143,7 @@ describe("the monthly run — booking, idempotency, catch-up", () => {
       await call(`/api/households/${householdId}/plan/run`, { method: "POST", cookie: owner.cookie, body: {} }),
     );
     expect(firstRun.bookedPeriods).toEqual(["2026-01"]);
-    expect(firstRun.bookedCents).toBe(48_623);
+    expect(firstRun.bookedCents).toBe(47_086);
 
     const secondRun = await body<RunPlanResponse>(
       await call(`/api/households/${householdId}/plan/run`, { method: "POST", cookie: owner.cookie, body: {} }),
@@ -156,7 +156,7 @@ describe("the monthly run — booking, idempotency, catch-up", () => {
       .where(and(eq(transactions.householdId, householdId), eq(transactions.origin, "fixed_plan")));
     expect(rows).toHaveLength(1);
     expect(rows[0]?.externalKey).toBe(`fixedplan:${householdId}:2026-01`);
-    expect(rows[0]?.amountCents).toBe(48_623);
+    expect(rows[0]?.amountCents).toBe(47_086);
     expect(rows[0]?.payerId).toBe(owner.id); // OTHER_ONLY, booked FOR the non-payer (partner)
     expect(rows[0]?.splitMode).toBe("OTHER_ONLY");
   });
@@ -176,7 +176,7 @@ describe("the monthly run — booking, idempotency, catch-up", () => {
       await call(`/api/households/${householdId}/plan/run`, { method: "POST", cookie: owner.cookie, body: {} }),
     );
     expect(catchUp.bookedPeriods).toEqual(["2026-02", "2026-03", "2026-04"]);
-    expect(catchUp.bookedCents).toBe(48_623 * 3);
+    expect(catchUp.bookedCents).toBe(47_086 * 3);
 
     const rows = await db
       .select()
@@ -226,17 +226,17 @@ describe("the monthly run — booking, idempotency, catch-up", () => {
     await call(`/api/households/${householdId}/plan/items`, {
       method: "POST",
       cookie: owner.cookie,
-      body: { label: "Fixkosten Gesamt", amountCents: 127_905, activeFrom: "2026-03" },
+      body: { label: "Fixkosten Gesamt", amountCents: 118_750, activeFrom: "2026-03" },
     });
     await call(`/api/households/${householdId}/plan/incomes`, {
       method: "POST",
       cookie: owner.cookie,
-      body: { personId: owner.id, amountCents: 333_826, validFrom: "2026-03" },
+      body: { personId: owner.id, amountCents: 301_745, validFrom: "2026-03" },
     });
     await call(`/api/households/${householdId}/plan/incomes`, {
       method: "POST",
       cookie: owner.cookie,
-      body: { personId: partner.id, amountCents: 204_734, validFrom: "2026-03" },
+      body: { personId: partner.id, amountCents: 198_255, validFrom: "2026-03" },
     });
     await call(`/api/households/${householdId}/plan`, { method: "PATCH", cookie: owner.cookie, body: { enabled: true } });
 
@@ -257,17 +257,17 @@ describe("the monthly run — booking, idempotency, catch-up", () => {
     await call(`/api/households/${householdId}/plan/items`, {
       method: "POST",
       cookie: owner.cookie,
-      body: { label: "Fixkosten Gesamt (nachgetragen)", amountCents: 127_905, activeFrom: "2026-01", activeTo: "2026-02" },
+      body: { label: "Fixkosten Gesamt (nachgetragen)", amountCents: 118_750, activeFrom: "2026-01", activeTo: "2026-02" },
     });
     await call(`/api/households/${householdId}/plan/incomes`, {
       method: "POST",
       cookie: owner.cookie,
-      body: { personId: owner.id, amountCents: 333_826, validFrom: "2026-01", validTo: "2026-02" },
+      body: { personId: owner.id, amountCents: 301_745, validFrom: "2026-01", validTo: "2026-02" },
     });
     await call(`/api/households/${householdId}/plan/incomes`, {
       method: "POST",
       cookie: owner.cookie,
-      body: { personId: partner.id, amountCents: 204_734, validFrom: "2026-01", validTo: "2026-02" },
+      body: { personId: partner.id, amountCents: 198_255, validFrom: "2026-01", validTo: "2026-02" },
     });
 
     const secondRun = await body<RunPlanResponse>(
@@ -275,7 +275,7 @@ describe("the monthly run — booking, idempotency, catch-up", () => {
     );
     // The previously-lost months are booked now that the data exists — NOT lost forever.
     expect(secondRun.bookedPeriods).toEqual(["2026-01", "2026-02"]);
-    expect(secondRun.bookedCents).toBe(48_623 * 2);
+    expect(secondRun.bookedCents).toBe(47_086 * 2);
 
     const rows = await db
       .select()
@@ -308,7 +308,7 @@ describe("import/plan period collision (review finding #3/#4, docs/spec.md §7.4
       householdId,
       payerId: owner.id,
       splitMode: "OTHER_ONLY",
-      amountCents: 48_623,
+      amountCents: 47_086,
       description: "Fixkostenanteil 07/2026",
       categoryId: null,
       bookedAt: now,
@@ -326,17 +326,17 @@ describe("import/plan period collision (review finding #3/#4, docs/spec.md §7.4
     await call(`/api/households/${householdId}/plan/items`, {
       method: "POST",
       cookie: owner.cookie,
-      body: { label: "Fixkosten Gesamt", amountCents: 127_905, activeFrom: "2026-01" },
+      body: { label: "Fixkosten Gesamt", amountCents: 118_750, activeFrom: "2026-01" },
     });
     await call(`/api/households/${householdId}/plan/incomes`, {
       method: "POST",
       cookie: owner.cookie,
-      body: { personId: owner.id, amountCents: 333_826, validFrom: "2026-01" },
+      body: { personId: owner.id, amountCents: 301_745, validFrom: "2026-01" },
     });
     await call(`/api/households/${householdId}/plan/incomes`, {
       method: "POST",
       cookie: owner.cookie,
-      body: { personId: partner.id, amountCents: 204_734, validFrom: "2026-01" },
+      body: { personId: partner.id, amountCents: 198_255, validFrom: "2026-01" },
     });
     // No `startPeriod` in this PATCH — the plan already defaulted to 2026-07 at creation.
     await call(`/api/households/${householdId}/plan`, { method: "PATCH", cookie: owner.cookie, body: { enabled: true } });
@@ -356,7 +356,7 @@ describe("import/plan period collision (review finding #3/#4, docs/spec.md §7.4
     expect(rows[0]?.origin).toBe("import");
 
     const balance = await body<{ balanceCents: number }>(await call(`/api/households/${householdId}/balance`, { cookie: owner.cookie }));
-    expect(balance.balanceCents).toBe(48_623); // not 97 246
+    expect(balance.balanceCents).toBe(47_086); // not 97 246
   });
 
   test("PATCH /plan rejects a startPeriod that would overlap an already-occupied period", async () => {
@@ -370,7 +370,7 @@ describe("import/plan period collision (review finding #3/#4, docs/spec.md §7.4
       householdId,
       payerId: owner.id,
       splitMode: "OTHER_ONLY",
-      amountCents: 48_623,
+      amountCents: 47_086,
       description: "Fixkostenanteil 07/2026",
       categoryId: null,
       bookedAt: now,
@@ -405,7 +405,7 @@ describe("recalculate — booked periods are never edited", () => {
     const householdId = await createHousehold(owner, "Neuberechnung");
     await joinAsSecondMember(owner, householdId, partner);
     await seedFullPlan(owner, partner, householdId);
-    await call(`/api/households/${householdId}/plan/run`, { method: "POST", cookie: owner.cookie, body: {} }); // books 2026-01 at 48 623
+    await call(`/api/households/${householdId}/plan/run`, { method: "POST", cookie: owner.cookie, body: {} }); // books 2026-01 at 47 086
 
     // A retroactive raise for the payer (owner) does not touch the booked row...
     const plan = await body<PlanResponse>(await call(`/api/households/${householdId}/plan`, { cookie: owner.cookie }));
@@ -422,9 +422,9 @@ describe("recalculate — booked periods are never edited", () => {
     expect(preview.applied).toBe(false);
     expect(preview.items).toHaveLength(1);
     expect(preview.items[0]?.period).toBe("2026-01");
-    expect(preview.items[0]?.bookedCents).toBe(48_623);
+    expect(preview.items[0]?.bookedCents).toBe(47_086);
     const expectedRecomputed = preview.items[0]!.recomputedCents;
-    expect(preview.items[0]?.deltaCents).toBe(expectedRecomputed - 48_623);
+    expect(preview.items[0]?.deltaCents).toBe(expectedRecomputed - 47_086);
 
     // ...instead it books a NEW adjustment transaction alongside it.
     const apply = await body<RecalculatePlanResponse>(
@@ -439,14 +439,14 @@ describe("recalculate — booked periods are never edited", () => {
       .from(transactions)
       .where(and(eq(transactions.householdId, householdId), eq(transactions.origin, "fixed_plan")));
     expect(bookedRows).toHaveLength(1);
-    expect(bookedRows[0]?.amountCents).toBe(48_623); // untouched
+    expect(bookedRows[0]?.amountCents).toBe(47_086); // untouched
 
     const adjustmentRows = await db
       .select()
       .from(transactions)
       .where(and(eq(transactions.householdId, householdId), eq(transactions.origin, "fixed_plan_adjustment")));
     expect(adjustmentRows).toHaveLength(1);
-    expect(adjustmentRows[0]?.externalKey).toBe(`fixedplan-adj:${householdId}:2026-01:48623`);
+    expect(adjustmentRows[0]?.externalKey).toBe(`fixedplan-adj:${householdId}:2026-01:47086`);
 
     // Re-applying against the SAME (unchanged since the raise) data now diffs against the
     // EFFECTIVE booked amount (original + the adjustment just written), which is exactly what
@@ -472,13 +472,13 @@ describe("recalculate — booked periods are never edited", () => {
     const partner = await createUser("Partner");
     const householdId = await createHousehold(owner, "Zweite Korrektur");
     await joinAsSecondMember(owner, householdId, partner);
-    await seedFullPlan(owner, partner, householdId); // owner income 333 826, booked 2026-01 at 48 623
+    await seedFullPlan(owner, partner, householdId); // owner income 301 745, booked 2026-01 at 47 086
     await call(`/api/households/${householdId}/plan/run`, { method: "POST", cookie: owner.cookie, body: {} });
 
     const plan = await body<PlanResponse>(await call(`/api/households/${householdId}/plan`, { cookie: owner.cookie }));
     const ownerIncome = plan.incomes.find((i) => i.personId === owner.id)!;
 
-    // First correction: 333 826 -> 400 000.
+    // First correction: 301 745 -> 400 000.
     await call(`/api/households/${householdId}/plan/incomes/${ownerIncome.id}`, {
       method: "PATCH",
       cookie: owner.cookie,
@@ -489,7 +489,7 @@ describe("recalculate — booked periods are never edited", () => {
     );
     expect(firstApply.adjustments).toHaveLength(1);
     const firstDelta = firstApply.items[0]!.deltaCents;
-    const effectiveAfterFirst = 48_623 + firstDelta;
+    const effectiveAfterFirst = 47_086 + firstDelta;
 
     // Second correction: 400 000 -> 500 000. Must NOT collide with the first adjustment's externalKey.
     await call(`/api/households/${householdId}/plan/incomes/${ownerIncome.id}`, {
@@ -501,7 +501,7 @@ describe("recalculate — booked periods are never edited", () => {
       await call(`/api/households/${householdId}/plan/recalculate`, { method: "POST", cookie: owner.cookie, body: { dryRun: true } }),
     );
     expect(secondPreview.items).toHaveLength(1);
-    expect(secondPreview.items[0]?.bookedCents).toBe(effectiveAfterFirst); // diffs against the EFFECTIVE amount, not the original 48 623
+    expect(secondPreview.items[0]?.bookedCents).toBe(effectiveAfterFirst); // diffs against the EFFECTIVE amount, not the original 47 086
 
     const secondApply = await body<RecalculatePlanResponse>(
       await call(`/api/households/${householdId}/plan/recalculate`, { method: "POST", cookie: owner.cookie, body: { dryRun: false } }),
@@ -516,13 +516,13 @@ describe("recalculate — booked periods are never edited", () => {
     expect(adjustmentRows).toHaveLength(2);
     const externalKeys = adjustmentRows.map((r) => r.externalKey).sort();
     expect(externalKeys).toEqual(
-      [`fixedplan-adj:${householdId}:2026-01:48623`, `fixedplan-adj:${householdId}:2026-01:${effectiveAfterFirst}`].sort(),
+      [`fixedplan-adj:${householdId}:2026-01:47086`, `fixedplan-adj:${householdId}:2026-01:${effectiveAfterFirst}`].sort(),
     );
 
     // The ledger reflects BOTH corrections, not just the first.
     const totalAdjustmentCents = adjustmentRows.reduce((sum, r) => sum + r.amountCents, 0);
     const balance = await body<{ balanceCents: number }>(await call(`/api/households/${householdId}/balance`, { cookie: owner.cookie }));
-    expect(balance.balanceCents).toBe(48_623 + totalAdjustmentCents);
+    expect(balance.balanceCents).toBe(47_086 + totalAdjustmentCents);
   });
 
   test("a period whose share rounded to ZERO is still correctable afterwards", async () => {
@@ -612,7 +612,7 @@ describe("recalculate — booked periods are never edited", () => {
       householdId,
       payerId: owner.id,
       splitMode: "OTHER_ONLY",
-      amountCents: 48_623,
+      amountCents: 47_086,
       description: "Miete 01/2026",
       categoryId: null,
       bookedAt: timestamp,

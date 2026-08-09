@@ -363,9 +363,9 @@ Die ersten sechzehn sind aus `toon-recipe` übernommen (dort teuer gelernt, hier
     Monatsausgaben und aus „wie viel haben wir für Tiere ausgegeben" **ausgeschlossen** — sie sind
     Schuldenbewegung, kein Verbrauch. Das ist **eine** exportierte Prädikatsfunktion, kein Ad-hoc-Filter
     an jeder Aufrufstelle.
-40. **Excels `SUM` überspringt Textzellen.** `H79` steht als Zeichenkette `"28,93"` im Blatt, weil
-    jemand ein deutsches Dezimalkomma getippt hat — 28,93 € sind seit April 2025 unsichtbar. Der
-    Importer holt sie per Default zurück; der importierte Saldo liegt damit **28,93 € über `K21`**, und
+40. **Excels `SUM` überspringt Textzellen.** `H79` steht als Zeichenkette `"31,47"` im Blatt, weil
+    jemand ein deutsches Dezimalkomma getippt hat — 31,47 € sind seit April 2025 unsichtbar. Der
+    Importer holt sie per Default zurück; der importierte Saldo liegt damit **31,47 € über `K21`**, und
     diese Zeile ist im Report **benannt und beziffert**, niemals in einer Toleranz versteckt. Die
     Rundungs-Toleranz gilt nur für den `--excel-text-quirk`-Vergleich und liegt bei 25 Cent.
 41. **Der Server schreibt Text in Datenzeilen in `households.defaultLocale`, nie in
@@ -420,8 +420,8 @@ Die ersten sechzehn sind aus `toon-recipe` übernommen (dort teuer gelernt, hier
     `code` branchen, nie auf `message`" wird damit für genau diesen Fall unmöglich einzuhalten).
     `settlements.service.ts`s `settlement_amount_invalid`-Check macht es bereits richtig vor.
 48. **`R8` ist keine Betragszelle — ihr Wert ist die SUMME, ihre `formula` sind die sechs einzelnen
-    Beträge.** `"1060+124+46.71+18.36+14.99+14.99"` als Text, nicht sechs Zellen. Wer nur den
-    gecachten `value` liest (wie jede andere Betragszelle im Blatt), bekommt `127905` ct total und
+    Beträge.** `"950+150+55.00+22.50+5.00+5.00"` als Text, nicht sechs Zellen. Wer nur den
+    gecachten `value` liest (wie jede andere Betragszelle im Blatt), bekommt `118750` ct total und
     verliert die sechs Einzelpositionen, aus denen `fixed_cost_items` bestehen muss — der Importer
     schrieb deshalb ursprünglich 310 Transaktionen, aber nie den Fixkostenplan selbst (leere
     `fixed_cost_items`/`incomes`, `startPeriod` nie über den Default hinaus bewegt), obwohl die Zahlen

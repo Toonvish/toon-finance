@@ -6,7 +6,7 @@
  * One narrow, deliberate exception, spelled out here rather than left
  * implicit: the spec's own worked examples name exactly two keyword
  * collisions where `geschenke` must win despite running later —
- * "`Sabine Karten`"/"`HandyHülle Sabine`" (`sabine` before `elektronik`'s
+ * "`Nadja Karten`"/"`HandyHülle Nadja`" (`nadja` before `elektronik`'s
  * `handy` and `hobby_kreativ`'s `karten\b`) and "`Blumen Häckeln`" (`blumen`
  * before `hobby_kreativ`'s `h(ä|ae)ckel`). Promoting `geschenke`'s FULL
  * pattern ahead of everything (an earlier draft of this file did exactly
@@ -14,7 +14,7 @@
  * corpus: measured against the spec's own §7.2 distribution table, it
  * steals 13 rows from `elektronik`/`hobby_kreativ`/`haushalt_kueche`/
  * `drogerie`/`mobilitaet`/`freizeit` that the table says belong there. So
- * only the two colliding keywords (`sabine`/`sabien`, `blumen`) are
+ * only the two colliding keywords (`nadja`/`nadia`, `blumen`) are
  * promoted; the rest of `geschenke`'s pattern runs at its documented
  * position, and the measured full-corpus distribution matches §7.2 exactly
  * (tiere 38, moebel_wohnen 32, elektronik 22, hobby_kreativ 21, … geschenke
@@ -31,7 +31,7 @@ interface CategoryRule {
 /** The two named exceptions — see the module doc comment. Everything else of `geschenke` stays at position 18. */
 const PROMOTED_RULE: CategoryRule = {
   slug: "geschenke",
-  pattern: /sabine|sabien|blumen/i,
+  pattern: /nadja|nadia|blumen/i,
 };
 
 /** The 20 rules in the spec's documented order (docs/ledger-spec.md §7.2), `geschenke` included at position 18. */
@@ -42,7 +42,7 @@ const ORDERED_RULES: CategoryRule[] = [
   { slug: "versicherung", pattern: /haftpflicht|versicherung/i },
   // `\bgez\b`, not the spec table's bare `gez`: as a substring it fires on
   // any "…gez…" word, and the sheet's own D-column header is literally
-  // "Schafi gezahlt" — the trap is in the corpus vocabulary, one typed label
+  // "Partner gezahlt" — the trap is in the corpus vocabulary, one typed label
   // away from filing a partner's repayment under taxes. Bounded, it still
   // matches "GEZ" and "GEZ-Gebühren"; on the real corpus it changes nothing
   // (the single steuern_abgaben row is "Steuern 2025", via `steuern`).
@@ -91,7 +91,7 @@ const ORDERED_RULES: CategoryRule[] = [
   {
     slug: "geschenke",
     pattern:
-      /geschenk|geburtstag|gebrtstag|burzeltag|weihnachten|weihnachts|fleurop|blumen|(ü|ue)mit|sabine|sabien|muddi|mutti|amelie|spende/i,
+      /geschenk|geburtstag|gebrtstag|burzeltag|weihnachten|weihnachts|fleurop|blumen|(ü|ue)mit|nadja|nadia|omi|oma|lena|spende/i,
   },
   {
     slug: "ausgleich",

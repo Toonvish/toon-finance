@@ -108,7 +108,7 @@ export const householdMembers = sqliteTable(
     userId: text("user_id").notNull().references(() => users.id, { onDelete: "restrict" }),
     // 1 or 2 — slot 1 anchors the balance sign convention (docs/spec.md §2.4).
     memberSlot: integer("member_slot").notNull(),
-    // "Eric", "Sandy" — the name visible inside this household.
+    // "Alex", "Robin" — the name visible inside this household.
     displayName: text("display_name").notNull(),
     joinedAt: integer("joined_at").notNull().$defaultFn(now),
   },

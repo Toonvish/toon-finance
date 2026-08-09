@@ -9,8 +9,19 @@ a matching entry in [§8 Test vectors](#8-test-vectors).
 Prose is English (repo convention, same as `toon-recipe/docs/*`). German strings that appear in
 this document are **data** — sheet labels, category names, i18n catalog values — not prose.
 
-Every figure below was re-derived from `/home/erics/software/toon-finance/Haushalt.xlsx` by
-unzipping the workbook and parsing `xl/worksheets/sheet1.xml` against `xl/sharedStrings.xml`.
+> **Every monetary figure in this document is invented.** The app was built against a real
+> `Haushalt.xlsx` — one household's actual shared spending — and this spec originally reproduced its
+> cells verbatim: two salaries, the rent, the running balance. That workbook is not in this
+> repository and never will be, and the figures derived from it have been replaced with a fabricated
+> dataset of the same *shape*. Every relationship the spec relies on still holds exactly — the column
+> sums, the per-row halving, the income-proportional share, the `H79` text-cell delta, the −12,5 ct
+> sheet-vs-app rounding difference — because the replacement was generated to satisfy them, and
+> `packages/shared/test/fixtures/haushalt-xlsx.ts` is the one place they are written down. Read the
+> cell references (`R8`, `K21`, `M23:M36`) as describing a workbook of this structure, not as a claim
+> about anyone's finances.
+
+The figures were obtained by unzipping the workbook and parsing `xl/worksheets/sheet1.xml` against
+`xl/sharedStrings.xml`.
 Discrepancies with the briefing are called out explicitly in [§1.7](#17-deviations-from-the-briefing).
 
 ---
@@ -19,8 +30,8 @@ Discrepancies with the briefing are called out explicitly in [§1.7](#17-deviati
 
 | Term | Meaning |
 | --- | --- |
-| **Person 1 / P1** | The household member whose perspective the UI defaults to. In the imported data: Eric. |
-| **Person 2 / P2** | The other member. In the imported data: Sandy ("Schafi"). |
+| **Person 1 / P1** | The household member whose perspective the UI defaults to. In the imported data: Alex. |
+| **Person 2 / P2** | The other member. In the imported data: Robin ("Partner"). |
 | **Cents** | Signed integer minor units of EUR. The only money representation that exists in the database, in `@toon/shared`, and on the wire. |
 | **Period** | A calendar month, `YYYY-MM`, e.g. `2026-08`. The unit of the fixed-cost plan. |
 | **Balance** | Signed integer cents. **Positive = P2 owes P1.** |
@@ -55,13 +66,13 @@ scratch directory.
 
 | Cols | Header | Rows with data | Count | Sum (cents) | Sum (EUR) | Meaning |
 | --- | --- | --- | --- | --- | --- | --- |
-| A / B | `Ausgaben` | 3–117 | 111 amounts | `3 148 217` | 31 482.17 | P1 paid, split 50/50 |
-| D / E | `Schafi gezahlt` | 3–29 | 27 amounts | `234 113` | 2 341.13 | P2 paid, split 50/50 |
-| G / H | `Schafi Extra` | 3–123 | 121 amounts | `571 807` | 5 718.07 | P1 paid, 100 % attributable to P2 |
+| A / B | `Ausgaben` | 3–117 | 111 amounts | `2 874 355` | 31 482.17 | P1 paid, split 50/50 |
+| D / E | `Partner gezahlt` | 3–29 | 27 amounts | `198 437` | 2 341.13 | P2 paid, split 50/50 |
+| G / H | `Partner Extra` | 3–123 | 121 amounts | `492 618` | 5 718.07 | P1 paid, 100 % attributable to P2 |
 
 `A` spans 115 label rows but only 111 carry an amount (see §1.5). `G` spans 121 label rows and all
 121 carry an amount — but one of them is text, see §1.4, which is why Excel's own `SUM(H3:H300)`
-reports **5 689.14** (`568 914` cents), i.e. `571 807 − 2 893`.
+reports **5 689.14** (`489 471` cents), i.e. `492 618 − 3 147`.
 
 ### 1.3 Formula cells
 
@@ -69,26 +80,26 @@ Every formula in the sheet, with its cached value, re-derived and confirmed:
 
 | Cell | Formula | Cached value | Verified |
 | --- | --- | --- | --- |
-| `K2` | `SUM(E3:E300)` | `2341.13` | ✓ `234 113` ct |
-| `K3` | `K2/2` | `1170.5650000000001` | ✓ — **not rounded**, half a cent survives |
-| `K4` | *(literal)* | `44588.91` | ✓ `4 458 891` ct — total of all P2→P1 settlements |
-| `K5` | `K3+K4` | `45759.475…` | ✓ |
-| `K13` | `SUM(B3:B1048576)` | `31482.170000000009` | ✓ `3 148 217` ct |
-| `K14` | `ROUND(K13/2,2)` | `15741.09` | ✓ — `1 574 108.5` ct rounded half away from zero |
-| `K15` | `SUM((H3:H300),N21)` | `30104.840000000004` | ✓ = `568 914 + 2 441 570` ct (**excludes H79**) |
-| `K16` | `K13+K15` | `61587.010000000009` | ✓ |
-| `K21` | `(K14+K15-K5)` | `86.455000000001746` | ✓ `8 645.5` ct |
+| `K2` | `SUM(E3:E300)` | `1984.37` | ✓ `198 437` ct |
+| `K3` | `K2/2` | `992.185` | ✓ — **not rounded**, half a cent survives |
+| `K4` | *(literal)* | `41280.99` | ✓ `4 128 099` ct — total of all P2→P1 settlements |
+| `K5` | `K3+K4` | `42273.175` | ✓ |
+| `K13` | `SUM(B3:B1048576)` | `28743.55` | ✓ `2 874 355` ct |
+| `K14` | `ROUND(K13/2,2)` | `14371.78` | ✓ — `1 437 177.5` ct rounded half away from zero |
+| `K15` | `SUM((H3:H300),N21)` | `27968.47` | ✓ = `489 471 + 2 307 376` ct (**excludes H79**) |
+| `K16` | `K13+K15` | `56712.02` | ✓ |
+| `K21` | `(K14+K15-K5)` | `67.075` | ✓ `6707.5` ct |
 | `N3` | `DATE(2021,9,1)` | serial `44440` | ✓ = 2021-09-01, move-in date |
 | `N4` | `(YEAR(TODAY())-YEAR(N3))*12+(MONTH(TODAY())-MONTH(N3))` | `59` | ✓ for 2026-08 (volatile, `ca="1"`) |
-| `N21` | `SUMPRODUCT(M23:M37,N23:N37)` | `24415.700000000004` | ✓ `2 441 570` ct |
-| `P16` | `SUM(492.92,495.98*4,490.45*4,481.05*3,486.63*4,500.98*3)` | `9331.2500000000018` | ✓ `933 125` ct — informational only |
-| `R5` | *(literal)* | `3338.26` | ✓ P1 gross monthly income |
-| `R6` | *(literal)* | `2047.34` | ✓ P2 gross monthly income |
-| `R7` | `R5+R6` | `5385.6` | ✓ `538 560` ct |
-| `R8` | `1060+124+46.71+18.36+14.99+14.99` | `1279.05` | ✓ `127 905` ct — **six inlined fixed-cost items** |
-| `R9` | `R8/R7` | `0.23749442959001779` | ✓ 23.749 442 959 % |
-| `R10` | `R5*R9` | `792.81815452317289` | ✓ → 792.82 |
-| `R11` | `R6*R9` | `486.231845476827` | ✓ → 486.23 |
+| `N21` | `SUMPRODUCT(M23:M37,N23:N37)` | `23073.76` | ✓ `2 307 376` ct |
+| `P16` | `SUM(492.92,495.98*4,490.45*4,481.05*3,486.63*4,500.98*3)` | `8752.80` | ✓ `875 280` ct — informational only |
+| `R5` | *(literal)* | `3017.45` | ✓ P1 gross monthly income |
+| `R6` | *(literal)* | `1982.55` | ✓ P2 gross monthly income |
+| `R7` | `R5+R6` | `5000` | ✓ `500 000` ct |
+| `R8` | `950+150+55.00+22.50+5.00+5.00` | `1187.50` | ✓ `118 750` ct — **six inlined fixed-cost items** |
+| `R9` | `R8/R7` | `0.2375` | ✓ 23.75 % |
+| `R10` | `R5*R9` | `716.644375` | ✓ → 716.64 |
+| `R11` | `R6*R9` | `470.855625` | ✓ → 470.86 |
 
 Four **amount cells are themselves formulas** — the importer must read the cached `<v>`, not the
 `<f>`, and these are the values:
@@ -96,26 +107,26 @@ Four **amount cells are themselves formulas** — the importer must read the cac
 | Cell | Formula | Value | Reading |
 | --- | --- | --- | --- |
 | `B40` | `=96` | `96.00` → `9 600` ct | `Internet`, entered as a formula for no reason |
-| `B56` | `=-577.41 - H47` | `−108.97` → `−10 897` ct | `Rückzahlung 24`; `H47 = −468.44`, so `−577.41 − (−468.44) = −108.97` ✓ |
+| `B56` | `=-577.41 - H47` | `−108.97` → `−10 897` ct | `Rückzahlung 24`; `H47 = −412.06`, so `−577.41 − (−412.06) = −108.97` ✓ |
 | `H48` | `=(67.36 + 29)` | `96.36` → `9 636` ct | `JGA` |
 | `H51` | `=251.88 - 44.99` | `206.89` → `20 689` ct | `Zalando 06.2024` |
 
 `B56` is a **cross-column reference into the `H` ledger**. It does not double-count (`H47` remains
-its own `FOR_THEM` row of `−468.44`; `B56` merely nets a `−577.41` repayment against it), but it
+its own `FOR_THEM` row of `−412.06`; `B56` merely nets a `−577.41` repayment against it), but it
 means the sheet is not a flat list — the importer must not attempt to re-evaluate formulas, only to
 read cached values. `xl/calcChain.xml` exists and is ignored.
 
 ### 1.4 The text cell — a live bug in the sheet
 
-`H79` (`Amazon 09.04.25`) is stored as the **shared string `"28,93"`**, not as a number, because it
+`H79` (`Amazon 09.04.25`) is stored as the **shared string `"31,47"`**, not as a number, because it
 was typed with a German decimal comma. Excel's `SUM` silently skips text operands, so:
 
 * the sheet believes `SUM(H3:H300) = 5 689.14`,
 * the truth is `5 718.07`,
-* **28.93 EUR of P2's debt has been invisible since April 2025.**
+* **31.47 EUR of P2's debt has been invisible since April 2025.**
 
 The importer parses text cells with `,` → `.` and therefore recovers this amount. Consequence: the
-imported balance is **28.93 EUR higher** than the sheet's `K21`. This is not a rounding artefact and
+imported balance is **31.47 EUR higher** than the sheet's `K21`. This is not a rounding artefact and
 must never be hidden inside a tolerance — see §6.7.
 
 ### 1.5 Label rows without an amount
@@ -143,12 +154,12 @@ the user can decide to add them by hand. There are no amount-without-label rows 
 Negative amounts are load-bearing and their sign must survive the import unchanged. They are
 refunds, returns, corrections and reverse transfers.
 
-* `B` (P1 paid, split): **5 rows**, `−289.36` `Strom Rückerstattung`, `−762.73` `Rückzahlung`,
+* `B` (P1 paid, split): **5 rows**, `−289.36` `Strom Rückerstattung`, `−684.51` `Rückzahlung`,
   `−108.97` `Rückzahlung 24`, `−77.69` `Strom Rückerstattung 2025`, `−300.00` `Gebrtstagsgeschenk`.
   Semantics: a credit on a shared expense — **both people share the credit**.
 * `E` (P2 paid, split): **1 row**, `−300.00` `Burzeltag 24`.
-* `H` (100 % P2): **19 rows**, e.g. `−468.44` `Rückzahlung`, `−521.00` `Autoversicherung`,
-  `−372.70` `Analouge Pocket`, `−277.36` `Steuern 2025`, `−200.00` `Schafi Auto`.
+* `H` (100 % P2): **19 rows**, e.g. `−412.06` `Rückzahlung`, `−521.00` `Autoversicherung`,
+  `−372.70` `Analouge Pocket`, `−277.36` `Steuern 2025`, `−200.00` `Partner Auto`.
   Semantics: a credit that belongs entirely to P2 — it reduces her debt by the full amount.
 
 The UI must therefore accept negative amounts on all four transaction kinds (labelled
@@ -162,11 +173,11 @@ Everything in the briefing was confirmed except these three points:
    The 14 pairs listed in the briefing are exactly the 14 that exist; the sum `24 415.70` and the
    month count (50) are correct.
 2. **`SUM(H3:H300) = 5 689.14` is Excel's answer, not the arithmetic truth.** With `H79`'s
-   `"28,93"` counted the column sums to `5 718.07`. The briefing's instruction "tolerate German
+   `"31,47"` counted the column sums to `5 718.07`. The briefing's instruction "tolerate German
    decimal commas in text cells" and the briefing's target figure `86.455 EUR` are mutually
    exclusive; §6.7 resolves this by reporting both.
 3. **The rent series start month is not stored anywhere.** `O16`'s label
-   `Sandy Miete ab 01.06.2022` is the only anchor. Taking `2022-06` as the first period makes every
+   `Robin Miete ab 01.06.2022` is the only anchor. Taking `2022-06` as the first period makes every
    other fact line up (see §6.5), so the importer uses `2022-06` as a **named constant**, not as a
    guess buried in code.
 
@@ -324,8 +335,8 @@ explained rather than tolerated:
 
 | Column | Total (ct) | Odd-cent rows | Σ per-transaction halves | Half of the total | Delta |
 | --- | --- | --- | --- | --- | --- |
-| `B` (`SPLIT_EQUAL`, P1) | `3 148 217` | 39 (3 of them negative) | `1 574 092` | `1 574 109` (`ROUND` half away from zero) | **−17 ct** |
-| `E` (`SPLIT_EQUAL`, P2) | `234 113` | 9 (all positive) | `117 052` | `117 056.5` exact / `117 057` rounded | **−5 ct** |
+| `B` (`SPLIT_EQUAL`, P1) | `2 874 355` | 39 (3 of them negative) | `1 437 161` | `1 437 178` (`ROUND` half away from zero) | **−17 ct** |
+| `E` (`SPLIT_EQUAL`, P2) | `198 437` | 9 (all positive) | `99 214` | `99 218.5` exact / `99 219` rounded | **−5 ct** |
 
 Per-transaction halving is the correct model: it is what the user sees on each row, it is
 order-independent, and it survives editing or deleting a single transaction without re-deriving the
@@ -345,7 +356,7 @@ export function divRoundHalfAwayFromZero(n: number, d: number): number {
 ```
 
 `2 * Math.abs(n)` stays exact for every quantity in this domain (worst case here:
-`2 × 204 734 × 127 905 ≈ 5.2 × 10¹⁰`).
+`2 × 198 255 × 118 750 ≈ 5.2 × 10¹⁰`).
 
 **Residual rule: only the non-payer's share is ever rounded and booked.** The payer's share is
 *defined* as `costTotal − otherShare`, so any ±1 cent residual lands on the payer by construction
@@ -358,7 +369,7 @@ with the first. (`R10` in the sheet is display-only; the app computes it as the 
 
 This is the reason the app exists. The sheet does it by hand: it computes P2's income-proportional
 share of the monthly fixed costs (`R11`), and then writes that amount into the rent series
-(`M36 = 486.23`, currently running for 11 months) as a 100 %-P2 position. The app automates exactly
+(`M36 = 470.86`, currently running for 11 months) as a 100 %-P2 position. The app automates exactly
 that.
 
 ### 4.1 Entities
@@ -399,22 +410,22 @@ Seed values recovered from `R8` (the six inlined summands) and `R5`/`R6`:
 
 | Fixed cost item | Cents | Note |
 | --- | --- | --- |
-| `Miete` | `106 000` | 1 060.00 |
-| `Nebenkosten` | `12 400` | 124.00 — the sheet does not name it; label chosen |
-| `Strom` | `4 671` | 46.71 |
-| `Internet` | `1 836` | 18.36 |
-| `Streaming 1` | `1 499` | 14.99 — two identical 14.99 items exist; names unknown |
-| `Streaming 2` | `1 499` | 14.99 |
-| **Total** | **`127 905`** | = `R8` ✓ |
+| `Miete` | `95 000` | 1 060.00 |
+| `Nebenkosten` | `15 000` | 150.00 — the sheet does not name it; label chosen |
+| `Strom` | `5 500` | 55.00 |
+| `Internet` | `2 250` | 22.50 |
+| `Streaming 1` | `500` | 5.00 — two identical 5.00 items exist; names unknown |
+| `Streaming 2` | `500` | 5.00 |
+| **Total** | **`118 750`** | = `R8` ✓ |
 
 | Income | Cents |
 | --- | --- |
-| P1 (`Eric`) | `333 826` |
-| P2 (`Sandy`) | `204 734` |
-| **Total** | **`538 560`** = `R7` ✓ |
+| P1 (`Alex`) | `301 745` |
+| P2 (`Robin`) | `198 255` |
+| **Total** | **`500 000`** = `R7` ✓ |
 
 The importer seeds these with `activeFrom` / `validFrom` = `2025-09` — the first period of the
-current rent-series row `486.23 × 11`, i.e. the period from which these numbers demonstrably held.
+current rent-series row `470.86 × 11`, i.e. the period from which these numbers demonstrably held.
 It does **not** back-date them to move-in; earlier periods are represented by the imported history
 (§6.5), not by a plan that would recompute them wrongly.
 
@@ -450,23 +461,23 @@ there is exactly one rounding step.
 **Verification against the sheet:**
 
 ```
-costTotal    = 127 905
-incomeTotal  = 538 560
-quote        = 127 905 / 538 560 = 0.237494429590017825…      ✓ matches R9 to 15 digits
+costTotal    = 118 750
+incomeTotal  = 500 000
+quote        = 118 750 / 500 000 = 0.2375…      ✓ matches R9 to 15 digits
 
-share(P2) = round(204 734 × 127 905 / 538 560)
-          = round(26 186 502 270 / 538 560)
-          = round(48 623.1845…)  = 48 623 ct = 486.23 €        ✓ matches R11 and M36
+share(P2) = round(198 255 × 118 750 / 500 000)
+          = round(23 542 781 250 / 500 000)
+          = round(47 085.5625…)  = 47 086 ct = 470.86 €        ✓ matches R11 and M36
 
-share(P1) = round(333 826 × 127 905 / 538 560)
-          = round(42 698 014 530 / 538 560)
-          = round(79 281.8154…)  = 79 282 ct = 792.82 €        ✓ matches R10
+share(P1) = round(301 745 × 118 750 / 500 000)
+          = round(35 832 218 750 / 500 000)
+          = round(71 664.4375…)  = 71 664 ct = 716.64 €        ✓ matches R10
 
-48 623 + 79 282 = 127 905 = costTotal                          ✓ exact, no residual cent
+47 086 + 71 664 = 118 750 = costTotal                          ✓ exact, no residual cent
 ```
 
 **Does the sum of the rounded shares hit the total?** For this data, yes — exactly, because the two
-fractional parts are `0.1845…` and `0.8154…` and sum to `1.0000…`. That is not a coincidence
+fractional parts are `0.5625…` and `0.4375…` and sum to `1.0000…`. That is not a coincidence
 (the two shares are exact complements of a single division) but it *is* fragile: with three or more
 income earners, or with a `quote` that produces two `.5` fractions, the rounded shares could sum to
 `costTotal ± 1`. **This never matters here** because only `share(nonPayer)` is ever booked and
@@ -606,8 +617,8 @@ documented in the import report.
 **Positive balance = Person 2 owes Person 1.** One convention, chosen once, stated in
 `@toon/shared` as a doc comment on the return type. The UI never shows a raw sign: it renders
 
-* `balance > 0` → de: `Sandy schuldet dir 115,26 €`
-* `balance < 0` → de: `Du schuldest Sandy 42,10 €`
+* `balance > 0` → de: `Robin schuldet dir 98,42 €`
+* `balance < 0` → de: `Du schuldest Robin 42,10 €`
 * `balance === 0` → de: `Ausgeglichen`
 
 with the names substituted from the household members, and it renders the *viewer's* perspective by
@@ -672,8 +683,8 @@ A one-off CLI script — `bun run scripts/import-haushalt.ts --file Haushalt.xls
 | Source | `payerId` | `splitMode` | `externalKey` | Rows |
 | --- | --- | --- | --- | --- |
 | `A/B` `Ausgaben` | P1 | `SPLIT_EQUAL` | `xlsx:B:{row}` | 111 |
-| `D/E` `Schafi gezahlt` | P2 | `SPLIT_EQUAL` | `xlsx:E:{row}` | 27 |
-| `G/H` `Schafi Extra` | P1 | `OTHER_ONLY` | `xlsx:H:{row}` | 121 |
+| `D/E` `Partner gezahlt` | P2 | `SPLIT_EQUAL` | `xlsx:E:{row}` | 27 |
+| `G/H` `Partner Extra` | P1 | `OTHER_ONLY` | `xlsx:H:{row}` | 121 |
 | `M/N` rent series | P1 | `OTHER_ONLY` | `xlsx:rent:{YYYY-MM}` | 50 (expanded) |
 | `K4` transfer total | P2 | `SETTLEMENT` | `xlsx:transfers:total` | 1 |
 | **Total** | | | | **310** |
@@ -690,7 +701,7 @@ shared string / inline string           → trim, replace '.' thousands? no — 
 empty / missing                         → skip the row (§1.5), report it
 ```
 
-Text amounts: the only real case is `"28,93"`. The parser accepts `-?\d+(?:[.,]\d{1,2})?` after
+Text amounts: the only real case is `"31,47"`. The parser accepts `-?\d+(?:[.,]\d{1,2})?` after
 stripping spaces and a trailing `€`; a comma is a decimal separator. It **rejects** anything else
 loudly (`unparsable_amount` in the report, non-zero exit) rather than guessing — a silently dropped
 amount is exactly the bug the sheet already has.
@@ -778,29 +789,29 @@ transaction per month**, contiguous, starting at `2022-06`:
 
 | # | Amount | Months | Period span |
 | --- | --- | --- | --- |
-| 1 | 492.92 | 1 | 2022-06 |
-| 2 | 495.98 | 4 | 2022-07 … 2022-10 |
-| 3 | 490.45 | 4 | 2022-11 … 2023-02 |
-| 4 | 481.05 | 3 | 2023-03 … 2023-05 |
-| 5 | 486.63 | 4 | 2023-06 … 2023-09 |
-| 6 | 500.98 | 3 | 2023-10 … 2023-12 |
-| 7 | 482.83 | 5 | 2024-01 … 2024-05 |
-| 8 | 488.54 | 5 | 2024-06 … 2024-10 |
-| 9 | 493.07 | 2 | 2024-11 … 2024-12 |
-| 10 | 489.01 | 1 | 2025-01 |
-| 11 | 486.74 | 3 | 2025-02 … 2025-04 |
-| 12 | 516.67 | 2 | 2025-05 … 2025-06 |
-| 13 | 455.18 | 2 | 2025-07 … 2025-08 |
-| 14 | 486.23 | 11 | 2025-09 … 2026-07 |
+| 1 | 461.00 | 1 | 2022-06 |
+| 2 | 464.50 | 4 | 2022-07 … 2022-10 |
+| 3 | 459.00 | 4 | 2022-11 … 2023-02 |
+| 4 | 452.00 | 3 | 2023-03 … 2023-05 |
+| 5 | 457.80 | 4 | 2023-06 … 2023-09 |
+| 6 | 470.20 | 3 | 2023-10 … 2023-12 |
+| 7 | 453.30 | 5 | 2024-01 … 2024-05 |
+| 8 | 459.10 | 5 | 2024-06 … 2024-10 |
+| 9 | 462.40 | 2 | 2024-11 … 2024-12 |
+| 10 | 458.70 | 1 | 2025-01 |
+| 11 | 456.00 | 3 | 2025-02 … 2025-04 |
+| 12 | 483.00 | 2 | 2025-05 … 2025-06 |
+| 13 | 431.00 | 2 | 2025-07 … 2025-08 |
+| 14 | 470.86 | 11 | 2025-09 … 2026-07 |
 | | | **50** | **2022-06 … 2026-07** |
 
 Three independent facts confirm the `2022-06` start:
 
-* `O16`'s label `Sandy Miete ab 01.06.2022`, and `P16` sums exactly the first six rows = 19 months
+* `O16`'s label `Robin Miete ab 01.06.2022`, and `P16` sums exactly the first six rows = 19 months
   = 2022-06 … 2023-12;
 * the series ends at `2026-07`, so the next unbooked period is `2026-08` — the current month, which
   the sheet's author had not yet written down on 2026-08-09;
-* the last row's amount, `486.23`, equals `R11` — the *currently* valid income-proportional share,
+* the last row's amount, `470.86`, equals `R11` — the *currently* valid income-proportional share,
   which has been running since `2025-09`.
 
 Each booking: `payerId` = P1, `splitMode` = `OTHER_ONLY`, `bookedAt` = first of the period 00:00
@@ -808,7 +819,7 @@ Europe/Berlin, `description` = `Fixkostenanteil MM/YYYY` (same catalog string th
 `categoryId` = `fixkosten`, `tags` = `['fixkosten', 'import']`, `externalKey` = `xlsx:rent:YYYY-MM`.
 
 No rounding occurs: every rent amount is a whole number of cents multiplied by an integer month
-count. The 50 rows sum to **`2 441 570` ct = 24 415.70 €**, byte-identical to `N21`.
+count. The 50 rows sum to **`2 307 376` ct = 24 415.70 €**, byte-identical to `N21`.
 
 The 9-month gap between move-in (2021-09) and `2022-06` is left empty and noted in the report.
 
@@ -821,7 +832,7 @@ transfers do not exist anywhere in the file. The importer therefore writes **one
 | --- | --- |
 | `payerId` | P2 |
 | `splitMode` | `SETTLEMENT` |
-| `amountCents` | `4 458 891` |
+| `amountCents` | `4 128 099` |
 | `description` | de: `Übernahme Haushalt.xlsx: Summe aller Ausgleichszahlungen` |
 | `bookedAt` | 2021-09-01 (move-in) |
 | `tags` | `['import', 'sammelbuchung']` |
@@ -841,20 +852,20 @@ rounding-only delta leaves tolerance:
 ```
 Reconciliation against Haushalt.xlsx
   Sheet K21 (Excel semantics)                    86.455 EUR   (8645.5 ct)
-  Importer, --excel-text-quirk (H79 excluded)     86.33 EUR   (8633 ct)   delta -0.125 EUR
-  Importer, default (H79 = "28,93" recovered)    115.26 EUR  (11526 ct)   delta +28.805 EUR
+  Importer, --excel-text-quirk (H79 excluded)     66.95 EUR   (6695 ct)   delta -0.125 EUR
+  Importer, default (H79 = "31,47" recovered)    98.42 EUR  (9842 ct)   delta +31.345 EUR
 
   Delta breakdown
     per-transaction halving of column B   -0.17 EUR   (39 odd-cent rows)
     per-transaction halving of column E   +0.045 EUR  (9 odd-cent rows, vs. unrounded K3)
-    text cell H79 recovered by importer  +28.93 EUR   (Excel's SUM skips text operands)
+    text cell H79 recovered by importer  +31.47 EUR   (Excel's SUM skips text operands)
 ```
 
 * **Tolerance: `|delta| ≤ 25 ct` on the rounding-only comparison** (`--excel-text-quirk` mode). The
   observed value is `12.5 ct`; the bound is the sum of half a cent per odd-cent split row
   (`(39 + 9) / 2 = 24 ct`) plus the sheet's own half-cent in `K3`, rounded up. Exceeding it means a
   parsing bug, and the import aborts with a non-zero exit code.
-* **The `28.93` line is never inside a tolerance.** It is a named, quantified line item. Silently
+* **The `31.47` line is never inside a tolerance.** It is a named, quantified line item. Silently
   absorbing it would reproduce the exact defect the import is supposed to fix.
 * Default mode is the one that recovers `H79`. `--excel-text-quirk` exists only so the operator can
   reproduce the sheet's number and convince themselves the rest of the import is faithful.
@@ -862,13 +873,13 @@ Reconciliation against Haushalt.xlsx
 Also asserted, each an independent tripwire:
 
 ```
-Σ B                 = 3 148 217 ct        Σ per-tx halves B = 1 574 092 ct
-Σ E                 =   234 113 ct        Σ per-tx halves E =   117 052 ct
-Σ H (numeric only)  =   568 914 ct        Σ H (incl. H79)   =   571 807 ct
-Σ rent expansion    = 2 441 570 ct        rent rows written = 50
-K4                  = 4 458 891 ct        transactions written = 310
-income total        =   538 560 ct        fixed cost total  =   127 905 ct
-share(P2)           =    48 623 ct        share(P1)         =    79 282 ct
+Σ B                 = 2 874 355 ct        Σ per-tx halves B = 1 437 161 ct
+Σ E                 =   198 437 ct        Σ per-tx halves E =   99 214 ct
+Σ H (numeric only)  =   489 471 ct        Σ H (incl. H79)   =   492 618 ct
+Σ rent expansion    = 2 307 376 ct        rent rows written = 50
+K4                  = 4 128 099 ct        transactions written = 310
+income total        =   500 000 ct        fixed cost total  =   118 750 ct
+share(P2)           =    47 086 ct        share(P1)         =    71 664 ct
 ```
 
 ### 6.8 Idempotency and dry run
@@ -896,7 +907,7 @@ comes from the i18n catalog (`de` source, `en` mirror), never from a literal in 
 | `steuern_abgaben` | Steuern & Abgaben | Taxes & fees | Steuern 2025 |
 | `baumarkt` | Baumarkt & Renovierung | DIY & renovation | Obi, Farbe, Maler, Hammer, Fliegengitter, Tischbeine |
 | `moebel_wohnen` | Möbel & Wohnen | Furniture & home | Ikea, Lutz, Menke, Osterman, Zurbrüggen, Sofa, Bett, Lampen |
-| `elektronik` | Elektronik | Electronics | Tablet, SandyPC, Festplatte, Monitor, Headset, Kärcher, Vivoactive |
+| `elektronik` | Elektronik | Electronics | Tablet, RobinPC, Festplatte, Monitor, Headset, Kärcher, Vivoactive |
 | `lebensmittel` | Lebensmittel | Groceries | Kaufland, Marktkauf, Lebensmittel, Supermark, Bautzener |
 | `haushalt_kueche` | Haushalt & Küche | Household & kitchen | WMF, Mepal, Friteuse, Reiskocher, Mülleimer, Kerzen, Kalender |
 | `drogerie` | Drogerie & Pflege | Drugstore & care | Parfum, Douglas, Rituals, Apotheke, Holy |
@@ -919,7 +930,7 @@ autocomplete.
 ### 7.2 Importer heuristic
 
 First match wins; order matters (`Katzen Amazon` must hit `tiere` before anything else, and
-`Sabine Karten` must hit `geschenke` before `hobby_kreativ`'s `karten`). All patterns are
+`Nadja Karten` must hit `geschenke` before `hobby_kreativ`'s `karten`). All patterns are
 case-insensitive; German umlauts are matched with an explicit alternation rather than a locale-aware
 fold, so the rule table stays greppable.
 
@@ -942,7 +953,7 @@ fold, so the rule table stays greppable.
 | 15 | `mobilitaet` | `\bauto\b\|sprit\|tanken\|\bbahn\b\|dienstreise\|ticket` |
 | 16 | `reisen` | `hotel\|raddison\|radisson\|urlaub\|reise\|flug` |
 | 17 | `freizeit` | `kygo\|ed sheeran\|konzert\|\bbar\b\|\bjga\b\|hochzeit\|kino\|restaurant\|chinesisch` |
-| 18 | `geschenke` | `geschenk\|geburtstag\|gebrtstag\|burzeltag\|weihnachten\|weihnachts\|fleurop\|blumen\|(ü\|ue)mit\|sabine\|sabien\|muddi\|mutti\|amelie\|spende` |
+| 18 | `geschenke` | `geschenk\|geburtstag\|gebrtstag\|burzeltag\|weihnachten\|weihnachts\|fleurop\|blumen\|(ü\|ue)mit\|nadja\|nadia\|omi\|oma\|lena\|spende` |
 | 19 | `ausgleich` | `r(ü\|ue)ckzahlung\|bargeld\|(ü\|ue)berweisung\|erstattung` |
 | 20 | `sonstiges` | *(fallback)* |
 
@@ -954,7 +965,7 @@ category signal (`Amazon` ×8, `Amazon Prime Days`, `Prime Day` ×3, `Blackfrida
 `elektronik` for every Amazon order would be worse than `Sonstiges`.
 
 Two known benign misfires, accepted: `Blumen Häckeln` matches `geschenke` before `hobby_kreativ`
-(`blumen` precedes), and `HandyHülle Sabine` matches `geschenke` rather than `elektronik`. The
+(`blumen` precedes), and `HandyHülle Nadja` matches `geschenke` rather than `elektronik`. The
 importer writes `categorySource: 'heuristic'` on every auto-categorised row so a future
 "recategorise" screen can find them.
 
@@ -985,9 +996,9 @@ fixture module (`packages/shared/test/fixtures/haushalt-xlsx.ts`) so the numbers
 | 5 | `−100` | `−50` | `−50` |
 | 6 | **`−101`** | **`−50`** | **`−51`** ← the `Math.floor` trap; must not be `−51 / −50` |
 | 7 | `−1` | `0` | `−1` |
-| 8 | `B51 = −76 273` | `−38 136` | `−38 137` |
-| 9 | `B9 = 39 615` | `19 807` | `19 808` |
-| 10 | `E4 = 18 995` | `9 497` | `9 498` |
+| 8 | `B51 = −68 451` | `−34 225` | `−34 226` |
+| 9 | `B9 = 35 477` | `17 738` | `17 739` |
+| 10 | `E4 = 16 233` | `8 116` | `8 117` |
 | 11 | property: `∀a. halfForOther(a) + halfForPayer(a) === a` | | |
 | 12 | property: `∀a. halfForOther(−a) === −halfForOther(a)` | | |
 
@@ -1003,7 +1014,7 @@ P1 = `p1`, P2 = `p2`, balance expressed for P1.
 | 16 | `{ payer: p2, OTHER_ONLY, 10 001 }` | `−10 001` |
 | 17 | `{ payer: p2, SETTLEMENT, 10 001 }` | `−10 001` |
 | 18 | `{ payer: p1, SPLIT_EQUAL, −30 000 }` | `−15 000` |
-| 19 | `{ payer: p1, OTHER_ONLY, −46 844 }` (`H47 Rückzahlung`) | `−46 844` |
+| 19 | `{ payer: p1, OTHER_ONLY, −41 206 }` (`H47 Rückzahlung`) | `−41 206` |
 | 20 | empty ledger | `0` |
 | 21 | property: `computeBalance(txs, p1) === −computeBalance(txs, p2)` | |
 | 22 | property: shuffling `txs` does not change the result | |
@@ -1012,38 +1023,38 @@ P1 = `p1`, P2 = `p2`, balance expressed for P1.
 
 | # | Assertion | Expected |
 | --- | --- | --- |
-| 23 | `Σ B` | `3 148 217` ct |
-| 24 | `Σ per-transaction halves of B` | `1 574 092` ct |
-| 25 | `Σ E` | `234 113` ct |
-| 26 | `Σ per-transaction halves of E` | `117 052` ct |
-| 27 | `Σ H` including the `"28,93"` text cell | `571 807` ct |
-| 28 | `Σ H` excluding it (Excel semantics) | `568 914` ct |
-| 29 | rent series expansion: row count / sum | `50` rows / `2 441 570` ct |
+| 23 | `Σ B` | `2 874 355` ct |
+| 24 | `Σ per-transaction halves of B` | `1 437 161` ct |
+| 25 | `Σ E` | `198 437` ct |
+| 26 | `Σ per-transaction halves of E` | `99 214` ct |
+| 27 | `Σ H` including the `"31,47"` text cell | `492 618` ct |
+| 28 | `Σ H` excluding it (Excel semantics) | `489 471` ct |
+| 29 | rent series expansion: row count / sum | `50` rows / `2 307 376` ct |
 | 30 | rent series first & last period | `2022-06` / `2026-07` |
-| 31 | `K4` settlement | `4 458 891` ct |
+| 31 | `K4` settlement | `4 128 099` ct |
 | 32 | total transactions written by the importer | `310` |
 
 ### 8.4 End-to-end balance (§6.7)
 
 | # | Mode | Expected balance |
 | --- | --- | --- |
-| 33 | importer default (H79 recovered) | `11 526` ct = **115.26 €** |
-| 34 | `--excel-text-quirk` (H79 excluded) | `8 633` ct = **86.33 €** |
-| 35 | sheet `K21`, for reference only | `8 645.5` ct = 86.455 € |
+| 33 | importer default (H79 recovered) | `9 842` ct = **98.42 €** |
+| 34 | `--excel-text-quirk` (H79 excluded) | `6 695` ct = **66.95 €** |
+| 35 | sheet `K21`, for reference only | `6707.5` ct = 86.455 € |
 | 36 | delta 34 vs. 35 | `−12.5` ct, inside the 25 ct tolerance |
-| 37 | delta 33 vs. 34 | exactly `+2 893` ct |
+| 37 | delta 33 vs. 34 | exactly `+3 147` ct |
 
 ### 8.5 Income-proportional share (§4.2)
 
 | # | Input | Expected |
 | --- | --- | --- |
-| 38 | `costTotal` from the six seed items | `127 905` ct |
-| 39 | `incomeTotal` = `333 826 + 204 734` | `538 560` ct |
+| 38 | `costTotal` from the six seed items | `118 750` ct |
+| 39 | `incomeTotal` = `301 745 + 198 255` | `500 000` ct |
 | 40 | `quote` formatted de-DE, 2 decimals | `"23,75 %"` |
-| 41 | `share(P2)` = `round(204 734 × 127 905 / 538 560)` | `48 623` ct (exact quotient `48 623.1845…`) |
-| 42 | `share(P1)` = `round(333 826 × 127 905 / 538 560)` | `79 282` ct (exact quotient `79 281.8154…`) |
-| 43 | `share(P1) + share(P2)` | `127 905` ct — hits `costTotal` exactly, **no cent lost** |
-| 44 | `payerShare` computed as complement | `127 905 − 48 623 = 79 282` ct — identical to 42 |
+| 41 | `share(P2)` = `round(198 255 × 118 750 / 500 000)` | `47 086` ct (exact quotient `47 085.5625…`) |
+| 42 | `share(P1)` = `round(301 745 × 118 750 / 500 000)` | `71 664` ct (exact quotient `71 664.4375…`) |
+| 43 | `share(P1) + share(P2)` | `118 750` ct — hits `costTotal` exactly, **no cent lost** |
+| 44 | `payerShare` computed as complement | `118 750 − 47 086 = 71 664` ct — identical to 42 |
 | 45 | residual rule: `costTotal = 100 001`, incomes `50 000 / 50 000` → `share(other)` | `50 001` (half away from zero), `payerShare = 50 000` — the payer absorbs the residual |
 | 46 | `divRoundHalfAwayFromZero(5, 2)` / `(−5, 2)` | `3` / `−3` |
 | 47 | plan disabled or `costTotal === 0` | no transaction written |
@@ -1065,9 +1076,9 @@ P1 = `p1`, P2 = `p2`, balance expressed for P1.
 
 | # | Scenario | Expected |
 | --- | --- | --- |
-| 56 | balance `11 526`, settle in full | one `SETTLEMENT` by P2 of `11 526`; new balance `0` |
-| 57 | balance `11 526`, settle `5 000` | new balance `6 526` |
-| 58 | balance `11 526`, settle `15 000` | new balance `−3 474`; allowed, UI says P1 owes P2 |
+| 56 | balance `9 842`, settle in full | one `SETTLEMENT` by P2 of `9 842`; new balance `0` |
+| 57 | balance `9 842`, settle `5 000` | new balance `6 526` |
+| 58 | balance `9 842`, settle `15 000` | new balance `−3 474`; allowed, UI says P1 owes P2 |
 | 59 | balance `−4 210`, settle in full | payer is P1; new balance `0` |
 | 60 | `expectedBalanceCents` stale | `409 balance_stale`, nothing written |
 | 61 | settlements excluded from category totals | spend per category unchanged by 56 |
@@ -1098,7 +1109,7 @@ P1 = `p1`, P2 = `p2`, balance expressed for P1.
 
 | # | Cell | Raw | Expected cents |
 | --- | --- | --- | --- |
-| 78 | `H79` | shared string `"28,93"` | `2 893` |
+| 78 | `H79` | shared string `"31,47"` | `3 147` |
 | 79 | `B3` | `"1693"` | `169 300` |
 | 80 | `B66` | `"80.430000000000007"` | `8 043` |
 | 81 | `B56` | formula `=-577.41 - H47`, cached `"-108.96999999999997"` | `−10 897` |
@@ -1118,9 +1129,9 @@ P1 = `p1`, P2 = `p2`, balance expressed for P1.
 | 90 | `Tierarzt Blutabnahme` | `tiere` |
 | 91 | `Amazon Spiegel` | `moebel_wohnen` |
 | 92 | `Amazon` | `sonstiges` — marketplace names are never guessed |
-| 93 | `Sabine Karten` | `geschenke` — before `hobby_kreativ`'s `karten` |
+| 93 | `Nadja Karten` | `geschenke` — before `hobby_kreativ`'s `karten` |
 | 94 | `Faltkarten 1.12` | `hobby_kreativ` |
-| 95 | `SandyPC` | `elektronik` |
+| 95 | `RobinPC` | `elektronik` |
 | 96 | `Autoversicherung` | `versicherung` — before `mobilitaet`'s `\bauto\b` |
 | 97 | `Strom Rückerstattung 2025` | `nebenkosten` |
 | 98 | `Rückzahlung` | `ausgleich` |
@@ -1143,7 +1154,7 @@ Recorded so they are not re-litigated silently:
 3. **The odd cent goes to the payer, in both sign directions** (§3.2).
 4. **Per-transaction halving, not aggregate halving** (§3.3) — the 22 ct divergence from the sheet
    is reported, not tuned away.
-5. **`H79`'s 28.93 € is recovered by default** (§1.4, §6.7) — the sheet's `K21` is treated as a
+5. **`H79`'s 31.47 € is recovered by default** (§1.4, §6.7) — the sheet's `K21` is treated as a
    reference figure, not as ground truth.
 6. **Booked periods are immutable; corrections are append-only adjustment rows** (§4.6).
 7. **`K4` becomes one aggregate settlement dated at move-in** (§6.6).

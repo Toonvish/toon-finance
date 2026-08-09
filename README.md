@@ -1,6 +1,6 @@
 # toon-finance
 
-Haushaltskasse für **genau zwei Personen** (Eric und Sandy): gemeinsame Ausgaben erfassen,
+Haushaltskasse für **genau zwei Personen** (Alex und Robin): gemeinsame Ausgaben erfassen,
 aufteilen und über einen einzigen Saldo ausgleichen. Herzstück ist der **Fixkostenplan**, der aus
 den beiden Einkommen und den festen Kosten jeden Monat den einkommensproportionalen Anteil der
 zweiten Person automatisch bucht. Deutschsprachige Oberfläche (de Default, en zusätzlich), EUR,

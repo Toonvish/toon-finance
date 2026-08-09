@@ -33,8 +33,8 @@ describe("locale negotiation", () => {
 
 describe("interpolate", () => {
   test("replaces every {name} with the matching value", () => {
-    expect(interpolate("{name} schuldet dir {amount}", { name: "Sandy", amount: "12,50 €" })).toBe(
-      "Sandy schuldet dir 12,50 €",
+    expect(interpolate("{name} schuldet dir {amount}", { name: "Robin", amount: "12,50 €" })).toBe(
+      "Robin schuldet dir 12,50 €",
     );
   });
 

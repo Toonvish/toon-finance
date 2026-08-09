@@ -119,7 +119,7 @@ describe("CreateTransactionRequestSchema", () => {
 
   test("a negative amount is ACCEPTED (refunds/credits are meaningful, docs/spec.md §3.6)", () => {
     expect(
-      CreateTransactionRequestSchema.safeParse({ kind: "FOR_THEM", amountCents: -2_893, description: "Erstattung" })
+      CreateTransactionRequestSchema.safeParse({ kind: "FOR_THEM", amountCents: -3_147, description: "Erstattung" })
         .success,
     ).toBe(true);
   });
@@ -144,7 +144,7 @@ test("TransactionResponseSchema round-trips a full row", () => {
     householdId: crypto.randomUUID(),
     payerId: crypto.randomUUID(),
     splitMode: "OTHER_ONLY" as const,
-    amountCents: 48_623,
+    amountCents: 47_086,
     description: "Fixkostenanteil 09/2025",
     categoryId: crypto.randomUUID(),
     categorySlug: "fixkosten",
@@ -156,9 +156,9 @@ test("TransactionResponseSchema round-trips a full row", () => {
     createdBy: null,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    otherShareCents: 48_623,
-    payerShareCents: 79_282,
-    balanceDeltaCents: 48_623,
+    otherShareCents: 47_086,
+    payerShareCents: 71_664,
+    balanceDeltaCents: 47_086,
     isExpense: true,
   };
   expect(TransactionResponseSchema.parse(row)).toEqual(row);
@@ -166,21 +166,21 @@ test("TransactionResponseSchema round-trips a full row", () => {
 
 test("BalanceResponseSchema shape", () => {
   const body = {
-    balanceCents: 11_526,
+    balanceCents: 9_842,
     perspectiveUserId: crypto.randomUUID(),
     viewerUserId: crypto.randomUUID(),
-    viewerBalanceCents: 11_526,
+    viewerBalanceCents: 9_842,
     asOf: new Date().toISOString(),
-    breakdown: { splitOtherCents: 1_574_092, forOtherCents: 3_013_377, settledCents: -4_458_891, transactionCount: 310 },
+    breakdown: { splitOtherCents: 1_437_161, forOtherCents: 2_799_994, settledCents: -4_128_099, transactionCount: 310 },
   };
   expect(BalanceResponseSchema.parse(body)).toEqual(body);
 });
 
 test("CreateSettlementRequestSchema requires expectedBalanceCents and a positive optional amountCents", () => {
-  expect(CreateSettlementRequestSchema.safeParse({ expectedBalanceCents: 11_526 }).success).toBe(true);
+  expect(CreateSettlementRequestSchema.safeParse({ expectedBalanceCents: 9_842 }).success).toBe(true);
   expect(CreateSettlementRequestSchema.safeParse({}).success).toBe(false);
   expect(
-    CreateSettlementRequestSchema.safeParse({ expectedBalanceCents: 11_526, amountCents: -1 }).success,
+    CreateSettlementRequestSchema.safeParse({ expectedBalanceCents: 9_842, amountCents: -1 }).success,
   ).toBe(false);
 });
 

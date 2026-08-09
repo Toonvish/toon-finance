@@ -72,8 +72,8 @@ describe("translate() — ambient locale, outside React", () => {
 
   test("interpolates values", () => {
     setLocaleForTest("de");
-    expect(translate("balance.owesYou", { name: "Sandy", amount: "86,46 €" })).toBe(
-      "Sandy schuldet dir 86,46 €",
+    expect(translate("balance.owesYou", { name: "Robin", amount: "86,46 €" })).toBe(
+      "Robin schuldet dir 86,46 €",
     );
   });
 

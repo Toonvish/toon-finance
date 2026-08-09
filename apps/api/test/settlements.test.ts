@@ -66,10 +66,10 @@ describe("POST /api/households/:householdId/settlements", () => {
     await call(`/api/households/${householdId}/transactions`, {
       method: "POST",
       cookie: owner.cookie,
-      body: { kind: "FOR_THEM", amountCents: 11_526, description: "Für Partner" },
+      body: { kind: "FOR_THEM", amountCents: 9_842, description: "Für Partner" },
     });
     const balance = await currentBalance(owner, householdId);
-    expect(balance).toBe(11_526);
+    expect(balance).toBe(9_842);
 
     const settle = await call(`/api/households/${householdId}/settlements`, {
       method: "POST",
@@ -80,7 +80,7 @@ describe("POST /api/households/:householdId/settlements", () => {
     const payload = await body<SettlementResponse>(settle);
     expect(payload.transaction.payerId).toBe(partner.id);
     expect(payload.transaction.splitMode).toBe("SETTLEMENT");
-    expect(payload.transaction.amountCents).toBe(11_526);
+    expect(payload.transaction.amountCents).toBe(9_842);
     expect(payload.balance.balanceCents).toBe(0);
   });
 
@@ -93,16 +93,16 @@ describe("POST /api/households/:householdId/settlements", () => {
     await call(`/api/households/${householdId}/transactions`, {
       method: "POST",
       cookie: owner.cookie,
-      body: { kind: "FOR_THEM", amountCents: 11_526, description: "Für Partner" },
+      body: { kind: "FOR_THEM", amountCents: 9_842, description: "Für Partner" },
     });
 
     const settle = await call(`/api/households/${householdId}/settlements`, {
       method: "POST",
       cookie: owner.cookie,
-      body: { expectedBalanceCents: 11_526, amountCents: 5_000 },
+      body: { expectedBalanceCents: 9_842, amountCents: 5_000 },
     });
     expect(settle.status).toBe(201);
-    expect((await body<SettlementResponse>(settle)).balance.balanceCents).toBe(6_526);
+    expect((await body<SettlementResponse>(settle)).balance.balanceCents).toBe(4_842);
   });
 
   test("a replayed mutationId does not book twice", async () => {

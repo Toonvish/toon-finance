@@ -73,7 +73,7 @@ export function translateKind(
 
 /**
  * The live explain line under the `KindPicker` (docs/spec.md §4.5): "Ihr
- * teilt 12,50 € — Sandy trägt 6,25 €." — recomputed on every keystroke from
+ * teilt 12,50 € — Robin trägt 6,25 €." — recomputed on every keystroke from
  * `halfForOther`, never a second, independent rounding.
  */
 export function kindEffectText(
