@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- viewport-fit=cover so the safe-area insets work under the notch / home indicator -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>toon-finance</title>
+    <meta
+      name="description"
+      content="Haushaltskasse für zwei: Ausgaben erfassen, aufteilen und ausgleichen."
+    />
+    <meta name="color-scheme" content="light dark" />
+    <!-- Updated at runtime by lib/theme.ts so the browser UI matches the rendered theme. -->
+    <meta name="theme-color" content="#faf5ee" />
+
+    <!-- installable PWA — <link rel="manifest"> is injected by vite-plugin-pwa -->
+    <meta name="application-name" content="toon-finance" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="toon-finance" />
+    <!--
+      NO `apple-mobile-web-app-status-bar-style: black-translucent` here, and do
+      not put it back — see CLAUDE.md gotcha 30. `viewport-fit=cover` above plus
+      the `theme-color` meta (kept in sync with the rendered theme by
+      lib/theme.ts) is the supported replacement.
+    -->
+    <meta name="format-detection" content="telephone=no" />
+
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/icons/icon-192.png" sizes="192x192" type="image/png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" sizes="180x180" />
+
+    <script>
+      // Apply the saved colour scheme before the first paint (no flash of light UI).
+      // The real key/logic lives in lib/theme.ts ([WEB-KERN]); this inline copy only
+      // has to agree on the storage key and must never *depend* on any module.
+      try {
+        var pref = localStorage.getItem("toon-finance.theme");
+        if (pref === "dark" || pref === "light") {
+          document.documentElement.setAttribute("data-theme", pref);
+        }
+        var dark =
+          pref === "dark" ||
+          (pref !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.style.backgroundColor = dark ? "#17120f" : "#faf5ee";
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute("content", dark ? "#17120f" : "#faf5ee");
+      } catch (error) {
+        /* private mode: ignore */
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>Diese App benötigt JavaScript. Bitte aktiviere JavaScript in deinem Browser.</noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

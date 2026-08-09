@@ -1,0 +1,25 @@
+{
+  "name": "@toon/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "start": "bun src/index.ts",
+    "test": "bun test",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "db:generate": "bunx drizzle-kit generate",
+    "db:migrate": "bun scripts/migrate.ts",
+    "db:studio": "bunx drizzle-kit studio",
+    "seed": "bun scripts/seed.ts",
+    "import:xlsx": "bun scripts/import-xlsx.ts"
+  },
+  "dependencies": {
+    "@hono/zod-validator": "^0.9.0",
+    "@libsql/client": "^0.17.4",
+    "@toon/shared": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.12.34",
+    "zod": "^4.4.3"
+  }
+}

@@ -1,0 +1,50 @@
+# Keep the build context small and — more importantly — keep secrets and host
+# artefacts out of it. Anything listed here can never end up in an image layer.
+
+# Host node_modules would be copied for the WRONG architecture when cross-building
+# (e.g. amd64 host, arm64 target). The `deps` stage installs them for the target
+# platform instead.
+node_modules
+**/node_modules
+
+# Secrets. `.env` holds SESSION_SECRET; the template is kept because it is
+# documentation.
+.env
+.env.*
+!.env.example
+
+# Local state: the developer's libSQL database file. The container gets its own
+# /app/data volume.
+data
+**/data
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+
+# Build output — the image builds its own.
+dist
+**/dist
+dev-dist
+**/dev-dist
+.vite
+coverage
+
+# Tests never run inside the image, but apps/api/tsconfig.json only includes
+# test/**, so they are cheap to carry and useful for `docker run … bun test`.
+# Excluded here anyway to keep the runtime layer small.
+apps/api/test
+packages/shared/test
+
+# VCS, editor and CI files.
+.git
+.github
+.gitignore
+.claude
+*.log
+.DS_Store
+Dockerfile
+docker-compose*.yml
+README.md
+docs
+Haushalt.xlsx

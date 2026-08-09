@@ -1,0 +1,198 @@
+/*
+ * toon-finance design tokens.
+ *
+ * ONE calm, ledger-appropriate palette: a steady slate-blue brand (trust,
+ * not excitement — this app shows money two people owe each other) over the
+ * same warm-sand neutrals `index.html`'s pre-paint script and `lib/theme.ts`
+ * already commit to (`--bg: #faf5ee` / `#17120f`, so there is no flash
+ * between the inline script's guess and this stylesheet's answer).
+ *
+ * Every colour the app uses is a CSS custom property here; components only
+ * ever reference the semantic Tailwind tokens `styles/index.css`'s
+ * `@theme inline` maps onto these variables (bg-surface, text-fg,
+ * border-line, …). Dark mode swaps the variables, so no component needs a
+ * `dark:` class — except `@custom-variant dark` itself (styles/index.css),
+ * which exists for the rare case a component truly needs one.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* --- brand: slate blue ------------------------------------------------ */
+  --toon-brand-50: #eef4fb;
+  --toon-brand-100: #d9e6f6;
+  --toon-brand-200: #b3cded;
+  --toon-brand-300: #85aedf;
+  --toon-brand-400: #5589cd;
+  --toon-brand-500: #35699f;
+  --toon-brand-600: #295380;
+  --toon-brand-700: #204163;
+  --toon-brand-800: #182e47;
+  --toon-brand-900: #101e30;
+
+  /* --- accent: muted gold (used sparingly — the fixed-cost plan's own colour) --- */
+  --toon-accent-300: #e4c477;
+  --toon-accent-400: #cca548;
+  --toon-accent-500: #b08a2e;
+  --toon-accent-600: #8c6d22;
+
+  /* --- ledger semantics: money owed to you is green, money you owe is red --- */
+  --toon-herb-400: #6ba374;
+  --toon-herb-500: #4a8455;
+  --toon-herb-600: #396a42;
+  --toon-danger-400: #e2685f;
+  --toon-danger-500: #c0392b;
+  --toon-danger-600: #9b2c20;
+
+  /* --- warm neutrals (unchanged from the GERÜST scaffold's --bg/--fg) ---- */
+  --toon-sand-25: #fdfaf6;
+  --toon-sand-50: #faf5ee;
+  --toon-sand-100: #f3ebe0;
+  --toon-sand-200: #e7dbcb;
+  --toon-sand-300: #d5c5b0;
+  --toon-sand-400: #b6a28a;
+  --toon-sand-500: #8d7c67;
+  --toon-sand-600: #6b5c4b;
+  --toon-sand-700: #4c4036;
+  --toon-sand-800: #322a23;
+  --toon-sand-900: #211b16;
+  --toon-sand-950: #17120f;
+
+  /* --- semantic (light) --------------------------------------------------- */
+  --bg: var(--toon-sand-50);
+  --bg-elevated: var(--toon-sand-25);
+  --surface: #ffffff;
+  --surface-2: var(--toon-sand-100);
+  --line: var(--toon-sand-200);
+  --line-strong: var(--toon-sand-300);
+  --fg: #211b16;
+  --fg-muted: var(--toon-sand-600);
+  --fg-subtle: var(--toon-sand-500);
+  --brand: var(--toon-brand-500);
+  --brand-hover: var(--toon-brand-600);
+  --brand-fg: #ffffff;
+  --brand-soft: var(--toon-brand-100);
+  --brand-soft-fg: var(--toon-brand-700);
+  --accent-soft: #f7ecd2;
+  --accent-soft-fg: var(--toon-accent-600);
+  --success: var(--toon-herb-500);
+  --success-soft: #e6f0e6;
+  --success-soft-fg: var(--toon-herb-600);
+  --warning: var(--toon-accent-600);
+  --warning-soft: #fbeccd;
+  --warning-soft-fg: #7d5406;
+  --danger: var(--toon-danger-500);
+  --danger-hover: var(--toon-danger-600);
+  --danger-fg: #ffffff;
+  --danger-soft: #fbe6e3;
+  --danger-soft-fg: var(--toon-danger-600);
+  --ring: var(--toon-brand-400);
+  --overlay: rgb(33 27 22 / 45%);
+  --skeleton: var(--toon-sand-200);
+
+  --elevation-soft: 0 1px 2px rgb(33 27 22 / 6%), 0 1px 3px rgb(33 27 22 / 5%);
+  --elevation-card: 0 1px 2px rgb(33 27 22 / 5%), 0 4px 14px -6px rgb(33 27 22 / 12%);
+  --elevation-pop: 0 10px 30px -10px rgb(33 27 22 / 28%), 0 2px 8px rgb(33 27 22 / 10%);
+
+  /* Height of the mobile bottom tab bar / top bar (without the safe-area inset). */
+  --tabbar-h: 3.75rem;
+  --topbar-h: 3.5rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: var(--toon-sand-950);
+    --bg-elevated: var(--toon-sand-900);
+    --surface: #201a15;
+    --surface-2: #2a221c;
+    --line: #382e26;
+    --line-strong: #4a3d33;
+    --fg: #f3ece3;
+    --fg-muted: #b8a693;
+    --fg-subtle: #9c8b79;
+    --brand: var(--toon-brand-300);
+    --brand-hover: var(--toon-brand-200);
+    --brand-fg: #0d1a29;
+    --brand-soft: #1c3350;
+    --brand-soft-fg: var(--toon-brand-200);
+    --accent-soft: #3a2f16;
+    --accent-soft-fg: var(--toon-accent-300);
+    --success: var(--toon-herb-400);
+    --success-soft: #22301f;
+    --success-soft-fg: #a9c68c;
+    --warning: var(--toon-accent-400);
+    --warning-soft: #3a2c0f;
+    --warning-soft-fg: var(--toon-accent-300);
+    --danger: var(--toon-danger-400);
+    --danger-hover: #ea8079;
+    --danger-fg: #2a0f0c;
+    --danger-soft: #3d1c19;
+    --danger-soft-fg: #f0a9a2;
+    --ring: var(--toon-brand-300);
+    --overlay: rgb(8 5 3 / 66%);
+    --skeleton: #322922;
+
+    --elevation-soft: 0 1px 2px rgb(0 0 0 / 40%);
+    --elevation-card: 0 1px 2px rgb(0 0 0 / 40%), 0 6px 18px -8px rgb(0 0 0 / 55%);
+    --elevation-pop: 0 12px 34px -12px rgb(0 0 0 / 70%), 0 2px 10px rgb(0 0 0 / 45%);
+  }
+}
+
+/* Explicit override wins over the media query in both directions. */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: var(--toon-sand-50);
+  --bg-elevated: var(--toon-sand-25);
+  --surface: #ffffff;
+  --surface-2: var(--toon-sand-100);
+  --line: var(--toon-sand-200);
+  --line-strong: var(--toon-sand-300);
+  --fg: #211b16;
+  --fg-muted: var(--toon-sand-600);
+  --fg-subtle: var(--toon-sand-500);
+  --brand: var(--toon-brand-500);
+  --brand-hover: var(--toon-brand-600);
+  --brand-fg: #ffffff;
+  --brand-soft: var(--toon-brand-100);
+  --brand-soft-fg: var(--toon-brand-700);
+  --danger: var(--toon-danger-500);
+  --danger-fg: #ffffff;
+  --danger-soft: #fbe6e3;
+  --danger-soft-fg: var(--toon-danger-600);
+  --overlay: rgb(33 27 22 / 45%);
+  --skeleton: var(--toon-sand-200);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: var(--toon-sand-950);
+  --bg-elevated: var(--toon-sand-900);
+  --surface: #201a15;
+  --surface-2: #2a221c;
+  --line: #382e26;
+  --line-strong: #4a3d33;
+  --fg: #f3ece3;
+  --fg-muted: #b8a693;
+  --fg-subtle: #9c8b79;
+  --brand: var(--toon-brand-300);
+  --brand-hover: var(--toon-brand-200);
+  --brand-fg: #0d1a29;
+  --brand-soft: #1c3350;
+  --brand-soft-fg: var(--toon-brand-200);
+  --accent-soft: #3a2f16;
+  --accent-soft-fg: var(--toon-accent-300);
+  --success: var(--toon-herb-400);
+  --success-soft: #22301f;
+  --success-soft-fg: #a9c68c;
+  --warning: var(--toon-accent-400);
+  --warning-soft: #3a2c0f;
+  --warning-soft-fg: var(--toon-accent-300);
+  --danger: var(--toon-danger-400);
+  --danger-hover: #ea8079;
+  --danger-fg: #2a0f0c;
+  --danger-soft: #3d1c19;
+  --danger-soft-fg: #f0a9a2;
+  --ring: var(--toon-brand-300);
+  --overlay: rgb(8 5 3 / 66%);
+  --skeleton: #322922;
+}

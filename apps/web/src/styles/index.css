@@ -1,0 +1,260 @@
+/*
+ * Global stylesheet. Order matters:
+ *   1. tailwindcss  (preflight + utility engine)
+ *   2. theme.css    (raw CSS custom properties, light + dark)
+ *   3. @theme inline (maps the semantic tokens into Tailwind utilities)
+ *
+ * The five hand-written utilities (`.px-gutter`, `.px-safe`, `.pt-safe`,
+ * `.pb-tabbar`, `.bottom-tabbar`) are emitted in `@layer utilities`, i.e.
+ * AFTER everything Tailwind generates — see CLAUDE.md gotchas 14/15 for why
+ * `.px-safe` must never sit next to `px-4` and why a sticky bar needs
+ * `.bottom-tabbar` instead of `bottom-0`.
+ */
+@import "tailwindcss";
+@import "./theme.css";
+
+@theme inline {
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans",
+    sans-serif;
+
+  /* Semantic colours — usable as bg-*, text-*, border-*, ring-*, fill-*. */
+  --color-bg: var(--bg);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-fg: var(--brand-fg);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-soft-fg: var(--brand-soft-fg);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-soft-fg: var(--accent-soft-fg);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-soft-fg: var(--success-soft-fg);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-soft-fg: var(--warning-soft-fg);
+  --color-danger: var(--danger);
+  --color-danger-hover: var(--danger-hover);
+  --color-danger-fg: var(--danger-fg);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-soft-fg: var(--danger-soft-fg);
+  --color-ring: var(--ring);
+  --color-overlay: var(--overlay);
+  --color-skeleton: var(--skeleton);
+
+  --shadow-soft: var(--elevation-soft);
+  --shadow-card: var(--elevation-card);
+  --shadow-pop: var(--elevation-pop);
+
+  --radius-card: 1rem;
+  --radius-sheet: 1.25rem;
+
+  /* Generates h-tabbar/h-topbar (and related width/padding utilities) from
+     the same height used by .pb-tabbar/.bottom-tabbar below — one source of truth. */
+  --spacing-tabbar: var(--tabbar-h);
+  --spacing-topbar: var(--topbar-h);
+}
+
+/* Dark variant that honours BOTH the OS preference and an explicit data-theme. */
+@custom-variant dark {
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme="light"]) *, :root:not([data-theme="light"])) {
+      @slot;
+    }
+  }
+  &:where(:root[data-theme="dark"] *, :root[data-theme="dark"]) {
+    @slot;
+  }
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+    scrollbar-gutter: stable;
+  }
+
+  body {
+    background-color: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    /* Never let a page scroll sideways on a phone. */
+    overflow-x: hidden;
+    overscroll-behavior-y: none;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--brand-soft);
+    color: var(--brand-soft-fg);
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  /* iOS zooms any input with a font-size below 16px on focus. */
+  input,
+  select,
+  textarea,
+  button {
+    font: inherit;
+    font-size: max(1rem, 16px);
+  }
+
+  [hidden] {
+    display: none !important;
+  }
+}
+
+@layer utilities {
+  /* Safe-area helpers for the notch / home indicator (viewport-fit=cover). */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  /*
+   * PURE INSET, and therefore NEVER combined with a `px-*` utility: both set
+   * padding-inline with the same specificity, and this rule is emitted later,
+   * so it WINS — with `env(safe-area-inset-left)` being 0px on a phone in
+   * portrait, `px-4 px-safe` silently means "no horizontal padding at all".
+   * Use `.px-gutter` for "gutter that also clears a notch"; keep this one for
+   * elements whose only horizontal padding IS the inset, e.g. the bottom tab bar.
+   */
+  .px-safe {
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+  /*
+   * The horizontal page gutter: at least `--gutter` (1rem by default), more
+   * when a notch demands it. `max()`, not `calc()` — adding them would indent
+   * content by ~60px in landscape on a notched phone.
+   */
+  .px-gutter {
+    padding-left: max(var(--gutter, 1rem), env(safe-area-inset-left, 0px));
+    padding-right: max(var(--gutter, 1rem), env(safe-area-inset-right, 0px));
+  }
+  /* Leaves room for the fixed bottom tab bar on small screens. */
+  .pb-tabbar {
+    padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px) + 1rem);
+  }
+  @media (width >= 1024px) {
+    .pb-tabbar {
+      padding-bottom: 2rem;
+    }
+  }
+  /*
+   * Pins a `sticky`/`fixed` element ABOVE the tab bar instead of behind it.
+   * `bottom-0` is wrong for anything sticky or fixed on a phone: the tab bar
+   * is `fixed` at bottom-0 and paints after <main>, so it covers the last
+   * ~3.75rem of the viewport. Every bottom action bar (the "Buchen" bar on
+   * `/new`, the "Ausgleichen" bar in `SettleDialog`) must use this instead —
+   * see CLAUDE.md gotcha 15.
+   */
+  .bottom-tabbar {
+    bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px));
+  }
+  @media (width >= 1024px) {
+    .bottom-tabbar {
+      bottom: 0;
+    }
+  }
+  /* Minimum comfortable touch target. */
+  .tap {
+    min-height: 2.75rem;
+    min-width: 2.75rem;
+  }
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  /* Wide content (tables, code, diagrams) scrolls inside itself. */
+  .scroll-x {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Animations — all of them opt out under prefers-reduced-motion. */
+@keyframes toon-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes toon-slide-up {
+  from {
+    transform: translateY(1.5rem);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes toon-slide-down {
+  from {
+    transform: translateY(-0.75rem);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes toon-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.animate-fade-in {
+  animation: toon-fade-in 150ms ease-out;
+}
+.animate-slide-up {
+  animation: toon-slide-up 220ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+.animate-slide-down {
+  animation: toon-slide-down 160ms ease-out;
+}
+.animate-skeleton {
+  animation: toon-pulse 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
