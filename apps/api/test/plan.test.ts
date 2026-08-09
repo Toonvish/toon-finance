@@ -27,7 +27,7 @@ interface PlanResponse {
   plan: { enabled: boolean; payerId: string; startPeriod: string; lastBookedPeriod: string | null };
   items: { id: string }[];
   incomes: { id: string; personId: string }[];
-  current: { bookableCents: number; costTotalCents: number; incomeTotalCents: number } | null;
+  current: { bookableCents: number; costTotalCents: number; incomeTotalCents: number; booked: boolean } | null;
   pendingPeriods: string[];
 }
 interface RunPlanResponse {
@@ -195,6 +195,187 @@ describe("the monthly run — booking, idempotency, catch-up", () => {
     );
     expect(run.bookedPeriods).toEqual(["2026-01"]);
   });
+
+  test("a period skipped for missing data is never permanently lost, once the data is backfilled (review finding #2)", async () => {
+    setClockForTest(JAN); // household startPeriod = 2026-01
+    const owner = await createUser("Owner");
+    const partner = await createUser("Partner");
+    const householdId = await createHousehold(owner, "Lücke");
+    await joinAsSecondMember(owner, householdId, partner);
+
+    // Items/incomes exist only from 2026-03 on — 2026-01/02 are a genuine data gap.
+    await call(`/api/households/${householdId}/plan/items`, {
+      method: "POST",
+      cookie: owner.cookie,
+      body: { label: "Fixkosten Gesamt", amountCents: 127_905, activeFrom: "2026-03" },
+    });
+    await call(`/api/households/${householdId}/plan/incomes`, {
+      method: "POST",
+      cookie: owner.cookie,
+      body: { personId: owner.id, amountCents: 333_826, validFrom: "2026-03" },
+    });
+    await call(`/api/households/${householdId}/plan/incomes`, {
+      method: "POST",
+      cookie: owner.cookie,
+      body: { personId: partner.id, amountCents: 204_734, validFrom: "2026-03" },
+    });
+    await call(`/api/households/${householdId}/plan`, { method: "PATCH", cookie: owner.cookie, body: { enabled: true } });
+
+    setClockForTest(APR);
+    const firstRun = await body<RunPlanResponse>(
+      await call(`/api/households/${householdId}/plan/run`, { method: "POST", cookie: owner.cookie, body: {} }),
+    );
+    expect(firstRun.bookedPeriods).toEqual(["2026-03", "2026-04"]);
+    expect(firstRun.skippedPeriods).toEqual(["2026-01", "2026-02"]);
+
+    // The gap must stay visible — `lastBookedPeriod` must NOT have jumped past it.
+    const afterFirstRun = await body<PlanResponse>(await call(`/api/households/${householdId}/plan`, { cookie: owner.cookie }));
+    expect(afterFirstRun.plan.lastBookedPeriod).not.toBe("2026-04");
+    expect(afterFirstRun.pendingPeriods).toContain("2026-01");
+    expect(afterFirstRun.pendingPeriods).toContain("2026-02");
+
+    // The user backfills the missing two months (a non-overlapping item/income pair).
+    await call(`/api/households/${householdId}/plan/items`, {
+      method: "POST",
+      cookie: owner.cookie,
+      body: { label: "Fixkosten Gesamt (nachgetragen)", amountCents: 127_905, activeFrom: "2026-01", activeTo: "2026-02" },
+    });
+    await call(`/api/households/${householdId}/plan/incomes`, {
+      method: "POST",
+      cookie: owner.cookie,
+      body: { personId: owner.id, amountCents: 333_826, validFrom: "2026-01", validTo: "2026-02" },
+    });
+    await call(`/api/households/${householdId}/plan/incomes`, {
+      method: "POST",
+      cookie: owner.cookie,
+      body: { personId: partner.id, amountCents: 204_734, validFrom: "2026-01", validTo: "2026-02" },
+    });
+
+    const secondRun = await body<RunPlanResponse>(
+      await call(`/api/households/${householdId}/plan/run`, { method: "POST", cookie: owner.cookie, body: {} }),
+    );
+    // The previously-lost months are booked now that the data exists — NOT lost forever.
+    expect(secondRun.bookedPeriods).toEqual(["2026-01", "2026-02"]);
+    expect(secondRun.bookedCents).toBe(48_623 * 2);
+
+    const rows = await db
+      .select()
+      .from(transactions)
+      .where(and(eq(transactions.householdId, householdId), eq(transactions.origin, "fixed_plan")));
+    expect(rows.map((r) => r.planPeriod).sort()).toEqual(["2026-01", "2026-02", "2026-03", "2026-04"]);
+  });
+});
+
+describe("import/plan period collision (review finding #3/#4, docs/spec.md §7.4 test #55)", () => {
+  test("imported rent and the live plan never collide", async () => {
+    // The household is created (and its plan defaults `startPeriod` to the
+    // CURRENT period, households.service.ts:76) BEFORE the import ever runs —
+    // exactly the ordering docs/ledger-spec.md §4.7 and the review finding
+    // describe: any household seeded before the one-time xlsx import starts
+    // out with a `startPeriod` that already overlaps the imported rent range,
+    // with no PATCH involved at all.
+    const JUL = Date.UTC(2026, 6, 15, 12);
+    setClockForTest(JUL);
+    const owner = await createUser("Owner");
+    const partner = await createUser("Partner");
+    const householdId = await createHousehold(owner, "Import Kollision");
+    await joinAsSecondMember(owner, householdId, partner);
+
+    // Simulate exactly what scripts/import-xlsx.ts writes for the rent series.
+    const importId = crypto.randomUUID();
+    const now = Date.now();
+    await db.insert(transactions).values({
+      id: importId,
+      householdId,
+      payerId: owner.id,
+      splitMode: "OTHER_ONLY",
+      amountCents: 48_623,
+      description: "Fixkostenanteil 07/2026",
+      categoryId: null,
+      bookedAt: now,
+      dateSource: "month",
+      origin: "import",
+      planPeriod: "2026-07",
+      categorySource: "system",
+      importSeq: null,
+      externalKey: "xlsx:rent:2026-07",
+      createdBy: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await call(`/api/households/${householdId}/plan/items`, {
+      method: "POST",
+      cookie: owner.cookie,
+      body: { label: "Fixkosten Gesamt", amountCents: 127_905, activeFrom: "2026-01" },
+    });
+    await call(`/api/households/${householdId}/plan/incomes`, {
+      method: "POST",
+      cookie: owner.cookie,
+      body: { personId: owner.id, amountCents: 333_826, validFrom: "2026-01" },
+    });
+    await call(`/api/households/${householdId}/plan/incomes`, {
+      method: "POST",
+      cookie: owner.cookie,
+      body: { personId: partner.id, amountCents: 204_734, validFrom: "2026-01" },
+    });
+    // No `startPeriod` in this PATCH — the plan already defaulted to 2026-07 at creation.
+    await call(`/api/households/${householdId}/plan`, { method: "PATCH", cookie: owner.cookie, body: { enabled: true } });
+
+    const plan = await body<PlanResponse>(await call(`/api/households/${householdId}/plan`, { cookie: owner.cookie }));
+    expect(plan.current?.booked).toBe(true); // already covered by the import, even though no fixed_plan row exists yet
+
+    const run = await body<RunPlanResponse>(
+      await call(`/api/households/${householdId}/plan/run`, { method: "POST", cookie: owner.cookie, body: {} }),
+    );
+    expect(run.bookedPeriods).toEqual([]);
+    expect(run.skippedPeriods).toEqual(["2026-07"]);
+    expect(run.bookedCents).toBe(0);
+
+    const rows = await db.select().from(transactions).where(and(eq(transactions.householdId, householdId), eq(transactions.planPeriod, "2026-07")));
+    expect(rows).toHaveLength(1); // still just the imported row — NOT doubled
+    expect(rows[0]?.origin).toBe("import");
+
+    const balance = await body<{ balanceCents: number }>(await call(`/api/households/${householdId}/balance`, { cookie: owner.cookie }));
+    expect(balance.balanceCents).toBe(48_623); // not 97 246
+  });
+
+  test("PATCH /plan rejects a startPeriod that would overlap an already-occupied period", async () => {
+    setClockForTest(JAN);
+    const owner = await createUser("Owner");
+    const householdId = await createHousehold(owner, "Startperiode gesperrt");
+
+    const now = Date.now();
+    await db.insert(transactions).values({
+      id: crypto.randomUUID(),
+      householdId,
+      payerId: owner.id,
+      splitMode: "OTHER_ONLY",
+      amountCents: 48_623,
+      description: "Fixkostenanteil 07/2026",
+      categoryId: null,
+      bookedAt: now,
+      dateSource: "month",
+      origin: "import",
+      planPeriod: "2026-07",
+      categorySource: "system",
+      importSeq: null,
+      externalKey: "xlsx:rent:2026-07",
+      createdBy: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const onto = await call(`/api/households/${householdId}/plan`, { method: "PATCH", cookie: owner.cookie, body: { startPeriod: "2026-07" } });
+    expect(onto.status).toBe(409);
+    expect((await body<ErrorPayload>(onto)).error.code).toBe("plan_period_locked");
+
+    const before = await call(`/api/households/${householdId}/plan`, { method: "PATCH", cookie: owner.cookie, body: { startPeriod: "2026-06" } });
+    expect(before.status).toBe(409);
+
+    const after = await call(`/api/households/${householdId}/plan`, { method: "PATCH", cookie: owner.cookie, body: { startPeriod: "2026-08" } });
+    expect(after.status).toBe(200);
+  });
 });
 
 describe("recalculate — booked periods are never edited", () => {
@@ -248,16 +429,80 @@ describe("recalculate — booked periods are never edited", () => {
     expect(adjustmentRows).toHaveLength(1);
     expect(adjustmentRows[0]?.externalKey).toBe(`fixedplan-adj:${householdId}:2026-01:48623`);
 
-    // Re-applying against the SAME (unchanged since the raise) data collides on the externalKey: no new row.
+    // Re-applying against the SAME (unchanged since the raise) data now diffs against the
+    // EFFECTIVE booked amount (original + the adjustment just written), which is exactly what
+    // today's data recomputes to — so there is nothing left to preview or apply at all
+    // (review finding #1: diffing against the untouched ORIGINAL amount would instead find the
+    // same stale delta every time and collide on the same externalKey forever).
     const reapply = await body<RecalculatePlanResponse>(
       await call(`/api/households/${householdId}/plan/recalculate`, { method: "POST", cookie: owner.cookie, body: { dryRun: false } }),
     );
-    expect(reapply.applied).toBe(true);
+    expect(reapply.applied).toBe(false);
+    expect(reapply.items).toHaveLength(0);
     expect(reapply.adjustments).toHaveLength(0);
     const adjustmentRowsAfter = await db
       .select()
       .from(transactions)
       .where(and(eq(transactions.householdId, householdId), eq(transactions.origin, "fixed_plan_adjustment")));
     expect(adjustmentRowsAfter).toHaveLength(1);
+  });
+
+  test("a SECOND retroactive correction of the same period books a second, distinct adjustment (review finding #1)", async () => {
+    setClockForTest(JAN);
+    const owner = await createUser("Owner");
+    const partner = await createUser("Partner");
+    const householdId = await createHousehold(owner, "Zweite Korrektur");
+    await joinAsSecondMember(owner, householdId, partner);
+    await seedFullPlan(owner, partner, householdId); // owner income 333 826, booked 2026-01 at 48 623
+    await call(`/api/households/${householdId}/plan/run`, { method: "POST", cookie: owner.cookie, body: {} });
+
+    const plan = await body<PlanResponse>(await call(`/api/households/${householdId}/plan`, { cookie: owner.cookie }));
+    const ownerIncome = plan.incomes.find((i) => i.personId === owner.id)!;
+
+    // First correction: 333 826 -> 400 000.
+    await call(`/api/households/${householdId}/plan/incomes/${ownerIncome.id}`, {
+      method: "PATCH",
+      cookie: owner.cookie,
+      body: { amountCents: 400_000 },
+    });
+    const firstApply = await body<RecalculatePlanResponse>(
+      await call(`/api/households/${householdId}/plan/recalculate`, { method: "POST", cookie: owner.cookie, body: { dryRun: false } }),
+    );
+    expect(firstApply.adjustments).toHaveLength(1);
+    const firstDelta = firstApply.items[0]!.deltaCents;
+    const effectiveAfterFirst = 48_623 + firstDelta;
+
+    // Second correction: 400 000 -> 500 000. Must NOT collide with the first adjustment's externalKey.
+    await call(`/api/households/${householdId}/plan/incomes/${ownerIncome.id}`, {
+      method: "PATCH",
+      cookie: owner.cookie,
+      body: { amountCents: 500_000 },
+    });
+    const secondPreview = await body<RecalculatePlanResponse>(
+      await call(`/api/households/${householdId}/plan/recalculate`, { method: "POST", cookie: owner.cookie, body: { dryRun: true } }),
+    );
+    expect(secondPreview.items).toHaveLength(1);
+    expect(secondPreview.items[0]?.bookedCents).toBe(effectiveAfterFirst); // diffs against the EFFECTIVE amount, not the original 48 623
+
+    const secondApply = await body<RecalculatePlanResponse>(
+      await call(`/api/households/${householdId}/plan/recalculate`, { method: "POST", cookie: owner.cookie, body: { dryRun: false } }),
+    );
+    expect(secondApply.applied).toBe(true);
+    expect(secondApply.adjustments).toHaveLength(1); // NOT [] — the bug this test guards against
+
+    const adjustmentRows = await db
+      .select()
+      .from(transactions)
+      .where(and(eq(transactions.householdId, householdId), eq(transactions.origin, "fixed_plan_adjustment")));
+    expect(adjustmentRows).toHaveLength(2);
+    const externalKeys = adjustmentRows.map((r) => r.externalKey).sort();
+    expect(externalKeys).toEqual(
+      [`fixedplan-adj:${householdId}:2026-01:48623`, `fixedplan-adj:${householdId}:2026-01:${effectiveAfterFirst}`].sort(),
+    );
+
+    // The ledger reflects BOTH corrections, not just the first.
+    const totalAdjustmentCents = adjustmentRows.reduce((sum, r) => sum + r.amountCents, 0);
+    const balance = await body<{ balanceCents: number }>(await call(`/api/households/${householdId}/balance`, { cookie: owner.cookie }));
+    expect(balance.balanceCents).toBe(48_623 + totalAdjustmentCents);
   });
 });

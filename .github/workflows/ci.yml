@@ -42,9 +42,9 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
-      # No DATABASE_URL is set on purpose: env.ts forces file::memory: (or a temp
-      # file via TEST_DATABASE_URL, set per test file) under NODE_ENV=test, and a
-      # runner that could reach a real database would be a bug.
+      # No DATABASE_URL is set on purpose: env.ts forces a fresh temp-file DB
+      # (or TEST_DATABASE_URL, if a run wants to pin one) under NODE_ENV=test,
+      # and a runner that could reach a real database would be a bug.
       - name: Test
         run: bun test
 

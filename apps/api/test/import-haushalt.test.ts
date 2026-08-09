@@ -5,8 +5,17 @@
  * this suite also checks come from
  * `packages/shared/test/fixtures/haushalt-xlsx.ts` so they are never re-typed
  * a second time.
+ *
+ * The one exception is the "against a temp-file DB" section at the bottom
+ * (docs/spec.md §7.6): THAT one reads the real workbook and writes through
+ * `writeImportRecords` against the shared `db` connection — which, under
+ * `bun test`, already IS a fresh temp-file database (env.ts's
+ * `defaultTestDatabaseUrl()`) — because the write path's idempotency
+ * (`(householdId, externalKey)`, not `externalKey` alone) and its household
+ * scoping are exactly what small hand-built fixtures cannot exercise.
  */
 import { describe, expect, test } from "bun:test";
+import { and, eq } from "drizzle-orm";
 import {
   COLUMN_B,
   COLUMN_E,
@@ -23,6 +32,14 @@ import { categorize } from "../scripts/import/categorize.ts";
 import { type CalendarDate, dateStartMsBerlin, resolveColumnDates, toIsoDate, toPeriod } from "../scripts/import/dates.ts";
 import { expandRentSeries, RENT_SERIES_START } from "../scripts/import/rent.ts";
 import type { XlsxCell } from "../scripts/import/xlsx-reader.ts";
+import { readWorkbook } from "../scripts/import/xlsx-reader.ts";
+import { buildImport, seedFixedCostPlan, writeImportRecords } from "../scripts/import-xlsx.ts";
+import { db } from "../src/db/client.ts";
+import { runMigrations } from "../src/db/migrate.ts";
+import { fixedCostItems, fixedCostPlans, incomes, transactions } from "../src/db/schema.ts";
+import { body, call, createHousehold, createUser, type TestUser } from "./support/harness.ts";
+
+await runMigrations(db);
 
 /* -------------------------------------------------------------------------- */
 /* §8.9 amount parsing                                                        */
@@ -318,4 +335,165 @@ test("K4 transfer total matches the shared fixture (docs/ledger-spec.md §6.6, �
 
 test("toPeriod round-trips a CalendarDate", () => {
   expect(toPeriod({ year: 2026, month: 3, day: 1 })).toBe("2026-03");
+});
+
+/* -------------------------------------------------------------------------- */
+/* §7.6 the write path, against a real DB (review finding: this file had NO   */
+/* integration test at all — only the parser unit tests above)               */
+/* -------------------------------------------------------------------------- */
+
+const HAUSHALT_XLSX_PATH = `${import.meta.dir}/../../../Haushalt.xlsx`;
+const REAL_IMPORT_DATE: CalendarDate = { year: 2026, month: 8, day: 9 }; // pinned, not todayBerlin() — deterministic
+
+async function joinAsSecondMember(owner: TestUser, householdId: string, member: TestUser): Promise<void> {
+  const invite = await call(`/api/households/${householdId}/invites`, { method: "POST", cookie: owner.cookie, body: {} });
+  const { token } = await body<{ token: string }>(invite);
+  const accept = await call("/api/households/invites/accept", { method: "POST", cookie: member.cookie, body: { token } });
+  expect(accept.status).toBe(200);
+}
+
+describe("writeImportRecords against the real Haushalt.xlsx (docs/spec.md §7.6)", () => {
+  test("writes exactly 310 rows once; re-running the same import writes nothing", async () => {
+    const owner = await createUser("Owner");
+    const partner = await createUser("Partner");
+    const householdId = await createHousehold(owner, "Xlsx Import");
+    await joinAsSecondMember(owner, householdId, partner);
+
+    const workbook = readWorkbook(HAUSHALT_XLSX_PATH);
+    const result = buildImport(workbook, false, REAL_IMPORT_DATE);
+
+    // The three reconciliation figures from ledger-spec.md §6.7, cross-checked
+    // against the same numbers packages/shared/test/ledger.test.ts derives
+    // from the hand-built fixture — this is what proves the fixture and the
+    // real workbook actually agree.
+    expect(result.records).toHaveLength(310);
+    expect(result.balanceCents).toBe(11_526);
+    expect(result.unparsable).toHaveLength(0);
+
+    const firstRun = await writeImportRecords(db, householdId, result.records);
+    expect(firstRun.inserted).toBe(310);
+    expect(firstRun.alreadyPresent).toBe(0);
+
+    const rowsAfterFirstRun = await db
+      .select({ id: transactions.id })
+      .from(transactions)
+      .where(and(eq(transactions.householdId, householdId), eq(transactions.origin, "import")));
+    expect(rowsAfterFirstRun).toHaveLength(310);
+
+    // A second run against the SAME household writes nothing new.
+    const secondRun = await writeImportRecords(db, householdId, result.records);
+    expect(secondRun.inserted).toBe(0);
+    expect(secondRun.alreadyPresent).toBe(310);
+
+    const rowsAfterSecondRun = await db
+      .select({ id: transactions.id })
+      .from(transactions)
+      .where(and(eq(transactions.householdId, householdId), eq(transactions.origin, "import")));
+    expect(rowsAfterSecondRun).toHaveLength(310); // still 310 — nothing doubled
+  });
+
+  test("--dry-run's read path (buildImport alone) never writes: calling it repeatedly changes nothing in the DB", async () => {
+    const workbook = readWorkbook(HAUSHALT_XLSX_PATH);
+    const before = await db.select({ id: transactions.id }).from(transactions);
+    buildImport(workbook, false, REAL_IMPORT_DATE);
+    buildImport(workbook, true, REAL_IMPORT_DATE);
+    const after = await db.select({ id: transactions.id }).from(transactions);
+    expect(after.length).toBe(before.length); // buildImport touches no table at all
+  });
+
+  test("is scoped per household — a second household importing the same workbook is not swallowed by the first's externalKeys (review finding)", async () => {
+    const ownerA = await createUser("OwnerA");
+    const partnerA = await createUser("PartnerA");
+    const householdA = await createHousehold(ownerA, "Haushalt A");
+    await joinAsSecondMember(ownerA, householdA, partnerA);
+
+    const ownerB = await createUser("OwnerB");
+    const partnerB = await createUser("PartnerB");
+    const householdB = await createHousehold(ownerB, "Haushalt B");
+    await joinAsSecondMember(ownerB, householdB, partnerB);
+
+    const workbook = readWorkbook(HAUSHALT_XLSX_PATH);
+    const result = buildImport(workbook, false, REAL_IMPORT_DATE);
+
+    const a = await writeImportRecords(db, householdA, result.records);
+    expect(a.inserted).toBe(310);
+
+    // Household B must import its OWN 310 rows — the bug this test guards
+    // against reported all 310 as "already present" (seeing household A's
+    // rows under the same `xlsx:*` externalKeys) and silently wrote nothing.
+    const b = await writeImportRecords(db, householdB, result.records);
+    expect(b.inserted).toBe(310);
+    expect(b.alreadyPresent).toBe(0);
+
+    const rowsB = await db
+      .select({ id: transactions.id })
+      .from(transactions)
+      .where(and(eq(transactions.householdId, householdB), eq(transactions.origin, "import")));
+    expect(rowsB).toHaveLength(310);
+  });
+
+  test("seeds the fixed-cost plan from Q5:R11 so it can actually run (review finding: importer never seeded the plan)", async () => {
+    const owner = await createUser("Owner");
+    const partner = await createUser("Partner");
+    const householdId = await createHousehold(owner, "Plan Seed");
+    await joinAsSecondMember(owner, householdId, partner);
+
+    const workbook = readWorkbook(HAUSHALT_XLSX_PATH);
+    const result = buildImport(workbook, false, REAL_IMPORT_DATE);
+
+    // The exact figures from ledger-spec.md §6.7 / the task brief's Q5:R11 block.
+    expect(result.planSeed.ownerSalaryCents).toBe(333_826);
+    expect(result.planSeed.partnerSalaryCents).toBe(204_734);
+    expect(result.planSeed.fixedCostItemCents).toEqual([106_000, 12_400, 4_671, 1_836, 1_499, 1_499]);
+    expect(result.planSeed.fixedCostItemCents.reduce((a, b) => a + b, 0)).toBe(127_905);
+    expect(result.planSeed.validSincePeriod).toBe("2025-09");
+    expect(result.planSeed.planStartPeriod).toBe("2026-08"); // nextPeriod(2026-07), the rent series' last period
+
+    const seedResult = await seedFixedCostPlan(db, householdId, result.planSeed);
+    expect(seedResult.seeded).toBe(true);
+    expect(seedResult.itemCount).toBe(6);
+    expect(seedResult.incomeCount).toBe(2);
+
+    const items = await db.select().from(fixedCostItems).where(eq(fixedCostItems.householdId, householdId));
+    expect(items).toHaveLength(6);
+    expect(items.reduce((sum, item) => sum + item.amountCents, 0)).toBe(127_905);
+    expect(items.find((i) => i.amountCents === 106_000)?.label).toBe("Miete");
+
+    const incomeRows = await db.select().from(incomes).where(eq(incomes.householdId, householdId));
+    expect(incomeRows).toHaveLength(2);
+    expect(incomeRows.reduce((sum, i) => sum + i.amountCents, 0)).toBe(538_560);
+
+    const planRows = await db.select().from(fixedCostPlans).where(eq(fixedCostPlans.householdId, householdId));
+    expect(planRows[0]?.enabled).toBe(true);
+    expect(planRows[0]?.startPeriod).toBe("2026-08");
+
+    // Idempotent: seeding an already-seeded household changes nothing.
+    const secondSeed = await seedFixedCostPlan(db, householdId, result.planSeed);
+    expect(secondSeed.seeded).toBe(false);
+    const itemsAfter = await db.select({ id: fixedCostItems.id }).from(fixedCostItems).where(eq(fixedCostItems.householdId, householdId));
+    expect(itemsAfter).toHaveLength(6);
+
+    // GET /plan/preview confirms the seeded data actually computes the right share.
+    const preview = await body<{ bookableCents: number; costTotalCents: number; incomeTotalCents: number }>(
+      await call(`/api/households/${householdId}/plan/preview?period=2026-08`, { cookie: owner.cookie }),
+    );
+    expect(preview.costTotalCents).toBe(127_905);
+    expect(preview.incomeTotalCents).toBe(538_560);
+    expect(preview.bookableCents).toBe(48_623);
+  });
+});
+
+describe("the CLI entry point (import.meta.main guard)", () => {
+  test("--dry-run without --household exits 0 and performs no write, via the real subprocess", async () => {
+    const proc = Bun.spawnSync({
+      cmd: ["bun", "run", "apps/api/scripts/import-xlsx.ts", "Haushalt.xlsx", "--dry-run"],
+      cwd: `${import.meta.dir}/../../..`,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const stdout = proc.stdout.toString();
+    expect(proc.exitCode).toBe(0);
+    expect(stdout).toContain("Total transactions: 310");
+    expect(stdout).toContain("no --household given: no database write performed.");
+  });
 });

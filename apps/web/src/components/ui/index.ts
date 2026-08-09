@@ -1,7 +1,13 @@
 /**
  * UI primitives for toon-finance. Tailwind v4 only, no component library.
- * Import from here: `import { Button, Card, useToast } from "@/components/ui";`
- * — the EINZIGE erlaubte Importpfad für Primitives (docs/spec.md §5.4).
+ * This barrel exists so `import { Button, Card, useToast } from
+ * "@/components/ui"` WORKS, but it is not, in practice, how this codebase
+ * imports them — every call site so far reaches straight into
+ * `@/components/ui/Button` etc. (docs/spec.md §8.2 #17: 192 deep imports
+ * against 1 through this file). Both are fine. The rule that actually
+ * matters, and the one worth keeping honest, is narrower than "import
+ * through the barrel": NEVER a second implementation of a primitive,
+ * whichever path a component reaches it by.
  *
  * Conventions every primitive follows:
  *  - touch targets are at least 44px (`sm` sizes are for dense desktop toolbars),

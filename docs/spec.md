@@ -767,7 +767,7 @@ Bedeutung der nicht selbsterklärenden Codes:
 | `category_system` | 409 | Löschen/Umbenennen von `fixkosten` |
 | `plan_disabled` | 409 | `run`/`recalculate` bei `enabled = false` |
 | `plan_incomplete` | 409 | keine aktive Position, kein Gehalt für eine Person, oder überlappende Gehaltszeilen |
-| `plan_period_locked` | 409 | Versuch, eine bereits gebuchte Periode zu überschreiben |
+| `plan_period_locked` | 409 | `PATCH …/plan { startPeriod }` auf oder vor eine bereits mit EINER Transaktion belegte Periode (egal welchen `origin`s — typischerweise die importierte Mietserie, ledger-spec.md §4.7) |
 | `plan_period_out_of_range` | 422 | Periode vor `startPeriod` oder in der Zukunft |
 
 ### 3.3 Health
@@ -1006,7 +1006,7 @@ Gemountet auf `/api/households/:householdId/plan`.
 | Methode | Pfad | Auth | Request | Response | Status |
 | --- | --- | --- | --- | --- | --- |
 | GET | `…/plan` | household | – | `PlanResponse` | 200, 403, 404 |
-| PATCH | `…/plan` | household | `UpdatePlanRequest` | `PlanResponse` | 200, 403, 404, 422 |
+| PATCH | `…/plan` | household | `UpdatePlanRequest` | `PlanResponse` | 200, 403, 404, 422, 409 `plan_period_locked` |
 | GET | `…/plan/preview` | household | `?period=YYYY-MM` | `PlanComputationResponse` | 200, 403, 404, 409 `plan_incomplete`, 422 `plan_period_out_of_range` |
 | POST | `…/plan/run` | household | `RunPlanRequest` | `RunPlanResponse` | 200, 403, 404, 409 `plan_disabled`, 409 `plan_incomplete` |
 | POST | `…/plan/recalculate` | household | `RecalculatePlanRequest` | `RecalculatePlanResponse` | 200, 403, 404, 409 `plan_disabled` |
@@ -1521,10 +1521,7 @@ period.ts                       [SHARED]    Period-Typ · currentPeriod · nextP
 plan.ts                         [SHARED]    PlanComputation · computePlanForPeriod · activeItemsIn · incomeIn · formatQuote
 categories.ts                   [SHARED]    DEFAULT_CATEGORY_SLUGS (21, in Anzeigereihenfolge) · SYSTEM_CATEGORY_SLUG · isSystemCategory
 tags.ts                         [SHARED]    normalizeTagName · TAG_MAX_LENGTH · SAMMELBUCHUNG_TAG
-import/amounts.ts               [IMPORT]    parseCellAmount (Zahl/Formel-Cache/Text mit Dezimalkomma) · assertCentExact
-import/dates.ts                 [IMPORT]    R1..R7, Zwei-Pass-Auflösung, DateSource, MOVE_IN_DATE, RENT_SERIES_START
-import/categorize.ts            [IMPORT]    CATEGORY_RULES (20 geordnete Regeln) · categorizeLabel
-import/rent.ts                  [IMPORT]    RENT_SERIES (14 Paare) · expandRentSeries
+# (KEIN import/*.ts hier — die vier Parser liegen tatsächlich unter apps/api/scripts/import/, §8.2 #16)
 schemas/common.ts               [SHARED]    ERROR_CODES · ApiErrorSchema · listResponse() · PaginationQuerySchema · MailDeliverySchema · CentsSchema · PeriodSchema
 schemas/health.ts               [SHARED]    HealthResponseSchema
 schemas/auth.ts                 [SHARED]    PasswordSchema · Register/Login/UpdateProfile/ChangePassword/Forgot/Reset · User/Me/AuthSession/SessionList
@@ -1554,10 +1551,8 @@ packages/shared/test/
   tags.test.ts                  [SHARED]
   i18n.test.ts                  [SHARED]
   schemas.test.ts               [SHARED]
-  import-amounts.test.ts        [IMPORT]
-  import-dates.test.ts          [IMPORT]
-  import-categorize.test.ts     [IMPORT]
-  import-rent.test.ts           [IMPORT]
+  # (KEINE import-*.test.ts hier — die Parser-Tests liegen alle zusammen in
+  #  apps/api/test/import-haushalt.test.ts, §8.2 #16)
 packages/shared/package.json    [GERÜST]    kein Build-Step, main = ./src/index.ts
 packages/shared/tsconfig.json   [GERÜST]    types ["bun"], include src/**, test/**
 ```
@@ -1617,8 +1612,12 @@ scripts/migrate.ts              [API-KERN]
 scripts/seed.ts                 [API-KERN]   Demo-Haushalt für die lokale Entwicklung
 scripts/reset-password.ts       [API-KERN]   Operator-Notausgang ohne Mailer
 scripts/plan-run.ts             [API-DOMÄNE] Catch-up von Hand, für Ops
-scripts/import-haushalt.ts      [IMPORT]     das EINMALIGE CLI-Skript (--file --household --dry-run --excel-text-quirk)
-lib/xlsx.ts                     [IMPORT]     minimaler ZIP+XML-Leser: sharedStrings, sheet1, Zellen als (t, v, f)
+scripts/import-xlsx.ts          [IMPORT]     das EINMALIGE CLI-Skript (<path> --household --dry-run --excel-text-quirk); tatsächlicher Name/Ort weicht von §8.2 #16 ab
+scripts/import/xlsx-reader.ts   [IMPORT]     minimaler ZIP+XML-Leser: sharedStrings, sheet1, Zellen als (t, v, f) — statt lib/xlsx.ts, §8.2 #16
+scripts/import/amounts.ts       [IMPORT]     parseAmountCell (Zahl/Formel-Cache/Text mit Dezimalkomma) — statt packages/shared/src/import/, §8.2 #16
+scripts/import/dates.ts         [IMPORT]     R1..R7, Zwei-Pass-Auflösung, DateSource, MOVE_IN_DATE
+scripts/import/categorize.ts    [IMPORT]     CATEGORY_RULES (20 geordnete Regeln) · categorize
+scripts/import/rent.ts          [IMPORT]     RENT_SERIES (14 Paare) · expandRentSeries · RENT_SERIES_START
 ```
 
 ```
@@ -1694,7 +1693,10 @@ lib/i18n/catalogs/categories.de.ts   [WEB-KERN]  … und .en.ts
 lib/i18n/catalogs/plan.de.ts    [WEB-KERN]  … und .en.ts
 lib/i18n/catalogs/balance.de.ts [WEB-KERN]  … und .en.ts
 lib/i18n/catalogs/settings.de.ts[WEB-KERN]  … und .en.ts
-components/ui/index.ts          [WEB-KERN]  der EINZIGE erlaubte Importpfad für Primitives
+components/ui/index.ts          [WEB-KERN]  Barrel; **tatsächlich** genutzt wird per Tiefimport
+                                 (`from "@/components/ui/Button"`), nicht über dieses Barrel — siehe
+                                 §8.2 #17. Die Regel, die zählt: NIE eine zweite Implementierung
+                                 eines Primitives, gleich über welchen Pfad importiert.
 components/ui/ActionMenu.tsx    [WEB-KERN]
 components/ui/Badge.tsx         [WEB-KERN]
 components/ui/Button.tsx        [WEB-KERN]  + buttonClasses
@@ -2404,24 +2406,32 @@ UI benennt es) · negativer Saldo, Zahler ist P1 · stale `expectedBalanceCents`
 
 ### 7.6 Import-Tests
 
-`packages/shared/test/import-dates.test.ts` — Vektoren 62–77, jede Regel R1–R7 mit ihrem echten Label
+**Pfad-Hinweis (§8.2 #16):** alle vier Testgruppen unten leben tatsächlich in DERSELBEN Datei,
+`apps/api/test/import-haushalt.test.ts` (Parser-Unit-Tests UND die DB-Integrationstests am Ende),
+nicht als vier separate `packages/shared/test/import-*.test.ts` — die Parser selbst liegen unter
+`apps/api/scripts/import/`. Die Vektornummern und Prüfinhalte unten gelten unverändert.
+
+Vektoren 62–77, jede Regel R1–R7 mit ihrem echten Label
 aus dem Blatt, inklusive der drei Härtefälle: `Amazon27.01.23` ohne Leerzeichen (R2),
 `Fressnapf 05.08.16` (Anker außerhalb des Bereichs, heilt sich über R5 zu `2026-08-05`),
 `Kalender 2025` (nackte Jahreszahl ist **kein** Datumsbeleg, Fallback auf den Anker darüber).
 Gesamtverteilung `56 day / 14 month / 193 estimated`, Ankerzahl pro Spalte `A 16, D 3, G 20`.
 
-`packages/shared/test/import-amounts.test.ts` — Vektoren 78–87: die Textzelle `"28,93" → 2 893`,
+Vektoren 78–87: die Textzelle `"28,93" → 2 893`,
 die vier Formelzellen über ihren **gecachten** Wert, `"80.430000000000007" → 8 043`,
 `"abc"` wirft `unparsable_amount`, fehlende Zelle landet in `skipped_no_amount`, und der deutsche
 Eingabeparser (`"1.234,56"` / `"1234,56"` / `"1234.56"` / `"-12,5"`).
 
-`packages/shared/test/import-categorize.test.ts` — Vektoren 88–99, inklusive der Reihenfolge-Fälle
+Vektoren 88–99, inklusive der Reihenfolge-Fälle
 (`Katzen Amazon` → `tiere`, `Sabine Karten` → `geschenke` **vor** `hobby_kreativ`, `Autoversicherung` →
 `versicherung` **vor** `mobilitaet`) und der Gesamtabdeckung 243/263.
 
-`apps/api/test/import-haushalt.test.ts` — der Lauf gegen eine Temp-Datei-DB: 310 Zeilen, die drei
-Abstimmungszeilen aus §6.7 der Ledger-Spec, ein **zweiter Lauf schreibt nichts**, `--dry-run` schreibt
-nichts und prüft trotzdem alles.
+Der Lauf gegen eine Temp-Datei-DB (die geteilte `bun test`-DB ist unter `NODE_ENV=test` bereits eine
+frische Temp-Datei, CLAUDE.md Gotcha #2): 310 Zeilen gegen die echte `Haushalt.xlsx`, die drei
+Abstimmungszeilen aus §6.7 der Ledger-Spec, ein **zweiter Lauf schreibt nichts**, und ein
+Haushalts-Scoping-Test (review-Befund: ein zweiter Haushalt darf nicht als „bereits importiert“
+erscheinen, nur weil derselbe `externalKey` schon für Haushalt A existiert). `--dry-run` wird
+zusätzlich als echter CLI-Subprozess geprüft (kein `--household`, exit 0, keine Datenbank berührt).
 
 ### 7.7 Weitere API-Tests
 
@@ -2472,13 +2482,18 @@ Headless-Browser bei 390 px nachsehen.
 1. **Der Startmonat der Mietserie ist im Blatt nicht gespeichert.** `2022-06` ist die einzige Annahme,
    die mit `O16`s Beschriftung, mit `P16` (Summe genau der ersten sechs Zeilen = 19 Monate) und mit dem
    Serienende `2026-07` zusammenpasst. *Empfehlung:* als benannte Konstante `RENT_SERIES_START` in
-   `packages/shared/src/import/rent.ts`, nicht als Literal im Skript, und der Importer druckt sie in
-   seinen Report. Wenn der Nutzer widerspricht, ist es eine Zeile.
+   `apps/api/scripts/import/rent.ts` (tatsächlicher Pfad, nicht `packages/shared/src/import/rent.ts` —
+   siehe §8.2 #16), nicht als Literal im Skript, und der Importer druckt sie in seinen Report. Wenn der
+   Nutzer widerspricht, ist es eine Zeile.
 2. **Die neun Monate zwischen Einzug (2021-09) und `2022-06` bleiben leer.** Vermutlich stecken sie in
    `A16 Miete 5 500,00`. *Empfehlung:* nichts erfinden; der Importer weist die Lücke im Report aus.
-3. **Zwei Fixkostenpositionen heißen im Blatt gar nicht** (`124,00` und die beiden `14,99`). Die Namen
-   `Nebenkosten`, `Streaming 1`, `Streaming 2` sind geraten. *Empfehlung:* so seeden und den Nutzer beim
-   ersten Öffnen von `/plan` umbenennen lassen; der Betrag ist richtig, nur das Etikett nicht.
+3. **Keine der sechs Fixkostenpositionen aus `R8`s Formel ist im Blatt benannt** (nicht nur `124,00`
+   und die beiden `14,99` — auch `1060`, `46,71` und `18,36` nicht). **Umgesetzt** (Review-Befund,
+   `apps/api/scripts/import-xlsx.ts`s `seedFixedCostPlan`, Labels exakt wie in `docs/ledger-spec.md`
+   §4.1 festgelegt): `Miete` (1060), `Nebenkosten` (124), `Strom` (46,71), `Internet` (18,36),
+   `Streaming 1`/`Streaming 2` (je 14,99). Der Betrag ist in jedem Fall richtig, nur das Etikett ist
+   eine Wahl dieses Importers — der Nutzer benennt beim ersten Öffnen von `/plan` um, falls er
+   widerspricht.
 4. **`H79` = 28,93 € wird per Default zurückgeholt**, der importierte Saldo liegt damit 28,93 € über
    `K21`. *Empfehlung:* dabei bleiben. Die Zahl ist seit April 2025 unsichtbar, weil Excels `SUM`
    Textzellen überspringt — das still zu reproduzieren wäre genau der Defekt, den die App beheben soll.
@@ -2519,6 +2534,8 @@ Headless-Browser bei 390 px nachsehen.
 | 13 | **Kein `cors()` im Bootstrap.** | Single-Origin ist gesperrte Entscheidung 7; ein CORS-Block, der nie greift, ist eine Konfiguration, die beim ersten Umbau falsch wird. |
 | 14 | **Vier Tabs mit „Erfassen" als eigenem Tab**, Fixkosten/Kategorien/Haushalt in der Sidebar (Vorschlag der Aufgabenstellung war Übersicht/Transaktionen/Erfassen/Profil — übernommen und begründet, §4.1). | Unverändert übernommen; ergänzt ist nur, über welche Karte jeder Sidebar-Eintrag auf dem Handy erreichbar ist. |
 | 15 | **`synchronous = FULL`** statt toon-recipes `NORMAL`; **`TEST_DATABASE_URL` auf eine Temp-Datei**. | Beide Recherche-Dokumente empfehlen es; hier ist es festgelegt statt empfohlen. |
+| 16 | **Die Import-Parser (`amounts`/`dates`/`categorize`/`rent`/`xlsx-reader`) liegen unter `apps/api/scripts/import/`, nicht unter `packages/shared/src/import/`** (§5.2/§5.3 planten Letzteres, §8.1 #1 nennt explizit `packages/shared/src/import/rent.ts`). Das CLI-Skript heißt `apps/api/scripts/import-xlsx.ts`, nicht `import-haushalt.ts`. Ihre Tests liegen alle zusammen in `apps/api/test/import-haushalt.test.ts`, nicht als vier Dateien in `packages/shared/test/`. **Nachträglich als Abweichung dokumentiert (Review-Befund), nicht rückgängig gemacht:** die Parser hängen an `apps/api/scripts/import/xlsx-reader.ts`, das selbst kein sinnvolles `packages/shared`-Modul ist (ein Ein-Datei-ZIP/XML-Leser für genau ein Einmal-Skript), und die enge Kopplung des ganzen Imports an EIN CLI-Skript hätte sich in `packages/shared` künstlich angefühlt. CLAUDE.md Zeile 175 ("reine Logik … Import-Parser … gehört in packages/shared") ist damit für DIESEN Fall zu pauschal — die vier Parser sind zwar reine Logik, aber ausschließlich vom einmaligen Importer verwendet, nie von `apps/api/src` oder `apps/web`. Wer sie wiederverwenden will (z. B. ein zweites Import-Werkzeug), verschiebt sie zu diesem Zeitpunkt nach `packages/shared/src/import/` — nicht vorher. |
+| 17 | **`components/ui/index.ts` ist praktisch totes Barrel — 192 Tiefimporte (`from "@/components/ui/Button"`) gegen 1 Import über das Barrel selbst** (§5.4 plante das Barrel als einzigen erlaubten Pfad). | Nachträglich als Abweichung dokumentiert (Review-Befund), nicht per Codemod rückgängig gemacht: keine Komponente importiert ein Primitive über einen zweiten, konkurrierenden Pfad (kein `../../../components/Button2`), die eigentlich schützenswerte Invariante ("nie eine zweite Implementierung") hält also — nur eben nicht über das Barrel erzwungen. Ein Codemod über 192 Importzeilen ist selbst ein Risiko (stille Umsortierung, Namenskollision); wer neu daran arbeitet, importiert weiter tief aus `components/ui/*`, nie aus einem zweiten Primitive-Ordner. |
 
 ### 8.3 Was ein Implementierungs-Agent zuerst liest
 

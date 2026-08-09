@@ -6,7 +6,6 @@ import {
   CreateTransactionRequestSchema,
   ERROR_CODES,
   HealthResponseSchema,
-  NonZeroCentsSchema,
   PaginationQuerySchema,
   PeriodSchema,
   PlanResponseSchema,
@@ -37,12 +36,6 @@ describe("PeriodSchema", () => {
 });
 
 describe("CentsSchema variants", () => {
-  test("NonZeroCentsSchema rejects exactly 0, allows negative", () => {
-    expect(NonZeroCentsSchema.safeParse(0).success).toBe(false);
-    expect(NonZeroCentsSchema.safeParse(-500).success).toBe(true);
-    expect(NonZeroCentsSchema.safeParse(500).success).toBe(true);
-  });
-
   test("PositiveCentsSchema rejects 0 and negatives", () => {
     expect(PositiveCentsSchema.safeParse(0).success).toBe(false);
     expect(PositiveCentsSchema.safeParse(-1).success).toBe(false);
@@ -112,10 +105,16 @@ describe("CreateTransactionRequestSchema", () => {
     expect(parsed.amountCents).toBe(1_250);
   });
 
-  test("amountCents === 0 is rejected (the only forbidden amount)", () => {
+  test("amountCents === 0 parses at the SCHEMA level (docs/spec.md §3.6's ban is enforced server-side)", () => {
+    // Deliberately NOT rejected here: a Zod `.refine()` issue always surfaces as
+    // the generic `422 validation_failed` (lib/errors.ts's `toApiError`), never
+    // as the dedicated `transaction_amount_zero` the wire contract promises.
+    // `createTransaction`/`updateTransaction` (apps/api/src/services/ledger/
+    // transactions.service.ts) throw that code directly instead — see
+    // apps/api/test/transactions.test.ts for the actual 422 assertion.
     expect(
       CreateTransactionRequestSchema.safeParse({ kind: "MINE_SPLIT", amountCents: 0, description: "x" }).success,
-    ).toBe(false);
+    ).toBe(true);
   });
 
   test("a negative amount is ACCEPTED (refunds/credits are meaningful, docs/spec.md §3.6)", () => {

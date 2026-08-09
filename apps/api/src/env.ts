@@ -63,7 +63,7 @@ const EnvSchema = z
     NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
 
     /** "file:./data/local.db" (self-hosted) or "libsql://xxx.turso.io" (Turso cloud). */
-    DATABASE_URL: z.string().min(1, "DATABASE_URL fehlt (z. B. file:./data/local.db)"),
+    DATABASE_URL: z.string().min(1, "DATABASE_URL is missing (e.g. file:./data/local.db)"),
     /** Only needed for remote libsql:// URLs. */
     DATABASE_AUTH_TOKEN: z.string().optional(),
 
@@ -78,7 +78,7 @@ const EnvSchema = z
      * Docker deployment, where there is no cross-origin request at all (see
      * CLAUDE.md decision 7 — no cors() call in src/index.ts). */
     WEB_ORIGIN: z.string().min(1).default("http://localhost:5173"),
-    SESSION_SECRET: z.string().min(16, "SESSION_SECRET muss mindestens 16 Zeichen haben"),
+    SESSION_SECRET: z.string().min(16, "SESSION_SECRET must be at least 16 characters"),
 
     PUBLIC_API_URL: z.string().optional(),
 

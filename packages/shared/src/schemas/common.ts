@@ -21,11 +21,17 @@ export type PeriodValue = z.infer<typeof PeriodSchema>;
 /** Signed integer cents — the only money representation on the wire. Never a float, never a decimal string. */
 export const CentsSchema = z.number().int();
 
-/** `CentsSchema`, additionally forbidding `0` (docs/spec.md §3.6: the only forbidden transaction amount). */
-export const NonZeroCentsSchema = CentsSchema.refine(
-  (value) => value !== 0,
-  refineKey("server.validation.amountNotZero"),
-);
+/**
+ * There is deliberately NO `NonZeroCentsSchema` here. `amountCents === 0` is
+ * the only forbidden transaction amount (docs/spec.md §3.6), but a Zod
+ * `.refine()` on it would always surface as generic `422 validation_failed`
+ * (`lib/errors.ts`), never as the dedicated `transaction_amount_zero` code
+ * the wire contract promises — every Zod issue maps to that one code
+ * regardless of which refinement failed. That check is thrown directly as an
+ * `ApiError` in `transactions.service.ts` instead (review finding: a schema
+ * refinement here would be a code path nobody could ever reach through the
+ * HTTP API).
+ */
 
 /** `CentsSchema`, additionally requiring a positive value (fixed-cost items, incomes, settlement amounts). */
 export const PositiveCentsSchema = CentsSchema.refine(

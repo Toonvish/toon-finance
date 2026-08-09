@@ -11,10 +11,6 @@ Datei-Layout), [`docs/ledger-spec.md`](docs/ledger-spec.md) (Fachlogik, Cent-Ari
 `Haushalt.xlsx`-Import) und [`CLAUDE.md`](CLAUDE.md) (gesperrte Entscheidungen, Gotchas). Dieses
 README beschreibt nur Setup und Struktur.
 
-> **Stand dieses Commits:** Gerüst ([GERÜST]) — Monorepo, Tooling, Docker und CI sind aufgesetzt und
-> `bun run typecheck` / `bun run build` sind grün. Die Fachlogik, das Datenbankschema, die Routen und
-> die Screens folgen in eigenen Schritten (siehe Besitzer-Tags in `docs/spec.md` §5).
-
 ## Stack
 
 | Teil | Technologie |
@@ -43,9 +39,13 @@ apps/web/src/
   features/{auth,settings,household,transactions,overview,plan,categories}/
 packages/shared/src/
   money.ts  ledger.ts  period.ts  plan.ts  categories.ts  tags.ts
-  import/{amounts,dates,categorize,rent}.ts
   schemas/*.ts  i18n/*.ts
 ```
+
+Der `Haushalt.xlsx`-Import (der einmalige Parser + das CLI-Skript) liegt bei `apps/api/scripts/
+import-xlsx.ts` und `apps/api/scripts/import/{xlsx-reader,amounts,dates,categorize,rent}.ts` — nicht
+unter `packages/shared/src/import/`, wie `docs/spec.md` §5.2 ursprünglich vorsah (Abweichung
+dokumentiert in §8.2 #16).
 
 Der vollständige Baum mit jedem anzulegenden Pfad und den Besitzer-Tags für parallele Arbeit steht
 in `docs/spec.md` §5.
@@ -57,18 +57,28 @@ Voraussetzung: [Bun](https://bun.sh) 1.3.14 (siehe `.bun-version`).
 ```bash
 bun install
 cp .env.example .env        # SESSION_SECRET setzen (openssl rand -hex 32 genügt lokal)
-bun run db:migrate           # sobald apps/api/scripts/migrate.ts existiert
+bun run db:migrate
 bun run seed                  # Demo-Haushalt für die lokale Entwicklung
 bun run dev                   # API auf :3001, Web auf :5173 (Vite proxied /api)
 ```
 
 Danach: `http://localhost:5173`.
 
+Der einmalige Import von `Haushalt.xlsx` (kein UI-Feature, ein CLI-Skript) läuft gegen einen
+existierenden Haushalt mit zwei Mitgliedern. Vom Repo-Root aus **mit dem Skriptpfad**, nicht über
+`bun run import:xlsx` — das `--filter @toon/api`-Script wechselt das Arbeitsverzeichnis nach
+`apps/api`, wo ein relativer `Haushalt.xlsx`-Pfad ins Leere zeigt:
+
+```bash
+bun run apps/api/scripts/import-xlsx.ts Haushalt.xlsx --dry-run     # nur der Report, keine Datenbank
+bun run apps/api/scripts/import-xlsx.ts Haushalt.xlsx --household <id>
+```
+
 ### Smoke-Test
 
 ```bash
 curl -s http://localhost:3001/api/health | jq
-# { "status": "ok", "version": "0.1.0", "time": "...", "database": "file" }
+# { "status": "ok", "version": "0.1.0", "time": "...", "database": "file", "mail": "console" }
 ```
 
 ## Skripte (Root)
@@ -79,12 +89,13 @@ curl -s http://localhost:3001/api/health | jq
 | `bun run dev:api` / `dev:web` | nur eine Seite |
 | `bun run build` | `apps/web` bauen (vite build + PWA) |
 | `bun run start` | API im Produktionsmodus (`apps/api`) |
-| `bun test` | alle Workspaces (`bun test`), meldet aktuell "keine Tests" |
+| `bun test` | alle Workspaces (`bun test`) |
 | `bun run typecheck` | `tsc --noEmit` sequenziell in `packages/shared`, `apps/api`, `apps/web` |
 | `bun run db:generate` | `drizzle-kit generate` gegen `apps/api/src/db/schema.ts` |
 | `bun run db:migrate` | Migrationen anwenden |
 | `bun run db:studio` | `drizzle-kit studio` |
 | `bun run seed` | Demo-Haushalt für die lokale Entwicklung |
+| `bun run import:xlsx` | einmaliger CLI-Import von `Haushalt.xlsx` (`--household <id>`, `--dry-run`, `--excel-text-quirk`); vom Root aus siehe die Fußnote unten bei „Setup" — relative Dateipfade brauchen den Skriptpfad, nicht dieses Filter-Script |
 
 **Vier Verifikations-Gates**, alle müssen grün sein, bevor irgendetwas „fertig" heißt:
 

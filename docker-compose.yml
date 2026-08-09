@@ -46,7 +46,7 @@ services:
       # it from the same origin. Do not set this to an absolute address.
       PUBLIC_API_URL: ""
 
-      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET fehlt - siehe docker/env.example}
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is missing - see docker/env.example}
 
       # Caddy sits in front and OVERWRITES X-Forwarded-For (see docker/Caddyfile).
       # That overwrite is what makes trusting the header safe here; without it
@@ -94,7 +94,7 @@ services:
     image: caddy:2.11.4-alpine
     restart: unless-stopped
     environment:
-      TOON_HOSTNAME: ${TOON_HOSTNAME:?TOON_HOSTNAME fehlt - siehe docker/env.example}
+      TOON_HOSTNAME: ${TOON_HOSTNAME:?TOON_HOSTNAME is missing - see docker/env.example}
       # `acme` (default) = a real Let's Encrypt certificate, needs a public
       # hostname and ports 80/443. `internal` = Caddy's local CA for a LAN box
       # or a local test, and then TOON_HSTS_MAX_AGE=0 belongs with it.

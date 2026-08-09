@@ -134,6 +134,10 @@ describe("POST /api/households/:householdId/transactions — the four kinds", ()
       body: { kind: "MINE_SPLIT", amountCents: 0, description: "Null" },
     });
     expect(zero.status).toBe(422);
+    // The wire contract (docs/spec.md §3.2/§3.6) promises this EXACT code, not
+    // the generic `validation_failed` a Zod `.refine()` would produce
+    // (review finding: `transaction_amount_zero` was declared but unreachable).
+    expect((await body<{ error: { code: string } }>(zero)).error.code).toBe("transaction_amount_zero");
   });
 });
 

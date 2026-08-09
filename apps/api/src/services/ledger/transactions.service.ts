@@ -84,6 +84,18 @@ function assertManual(row: TransactionRow): void {
   if (row.origin !== "manual") throw ApiError.conflict("transaction_generated", "server.transaction.generated");
 }
 
+/**
+ * `0` is the only forbidden transaction amount (docs/spec.md §3.6, §3.2:
+ * `422 transaction_amount_zero`). Thrown directly here — not via a Zod
+ * `.refine()` on `CreateTransactionRequestSchema` — because every Zod issue
+ * surfaces as the generic `422 validation_failed` (`lib/errors.ts`), which
+ * would make `transaction_amount_zero` a code the wire contract promises but
+ * the server can never actually produce.
+ */
+function assertAmountNotZero(amountCents: number): void {
+  if (amountCents === 0) throw new ApiError(422, "transaction_amount_zero", "server.validation.amountNotZero");
+}
+
 /** Resolves the `otherId` `kindToStorage` needs, throwing only for the two kinds that actually require one. */
 async function resolveOtherId(db: DbLike, householdId: string, viewerId: string, kind: TxKindValue): Promise<string> {
   if (kind === "THEIRS_SPLIT" || kind === "TRANSFER") {
@@ -115,6 +127,7 @@ export interface MutationOutcome {
  * does not exist (docs/spec.md §2.9).
  */
 export async function createTransaction(db: Database, input: CreateTransactionServiceInput): Promise<MutationOutcome> {
+  assertAmountNotZero(input.amountCents);
   return withTransaction(db, async (tx) => {
     const person1Id = await slot1UserId(tx, input.householdId);
 
@@ -173,6 +186,7 @@ export async function updateTransaction(
   transactionId: string,
   input: UpdateTransactionServiceInput,
 ): Promise<MutationOutcome> {
+  if (input.amountCents !== undefined) assertAmountNotZero(input.amountCents);
   return withTransaction(db, async (tx) => {
     const person1Id = await slot1UserId(tx, input.householdId);
     const existing = await loadRowOr404(tx, input.householdId, transactionId);

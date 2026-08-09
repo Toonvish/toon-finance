@@ -26,8 +26,12 @@
  */
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { computeBalance, formatCents, periodStartMs, type BalanceTransaction } from "@toon/shared";
-import { eq } from "drizzle-orm";
+import { computeBalance, computePlanForPeriod, formatCents, nextPeriod, periodStartMs, type BalanceTransaction } from "@toon/shared";
+import { and, eq } from "drizzle-orm";
+// Type-only: erased at build time, so importing it does NOT pull in
+// `../src/db/client.ts` (and therefore does not require DATABASE_URL) —
+// `--dry-run` still never touches the database module.
+import type { Database } from "../src/db/client.ts";
 import { categorize, DEFAULT_CATEGORY_FALLBACK } from "./import/categorize.ts";
 import { AmountParseError, parseAmountCell } from "./import/amounts.ts";
 import { type CalendarDate, dateStartMsBerlin, resolveColumnDates } from "./import/dates.ts";
@@ -182,12 +186,101 @@ function extractRentSeries(workbook: XlsxWorkbook): RentSeriesPair[] {
   return pairs;
 }
 
+/**
+ * The Q5:R11 income block — the reason this app exists (docs/ledger-spec.md
+ * §4.2). `R8` is not a plain amount cell: its FORMULA TEXT is the six named
+ * fixed-cost line items, written as a bare sum (`"1060+124+46.71+18.36+14.99
+ * +14.99"`), never as six separate cells — this is the only way to recover
+ * them individually instead of just their total.
+ */
+export interface PlanSeed {
+  /** R5 — P1 (Eric)'s salary. */
+  ownerSalaryCents: number;
+  /** R6 — P2 (Sandy)'s salary. */
+  partnerSalaryCents: number;
+  /** R8's six summands, in sheet order. NONE of them is labelled anywhere in
+   * the sheet (docs/spec.md §8.1 #3) — `fixedCostItemLabels()` assigns the
+   * names docs/ledger-spec.md §4.1 settled on, which the user renames on
+   * first opening `/plan` if they disagree. */
+  fixedCostItemCents: number[];
+  /** The period this salary/cost snapshot has been valid since — derived,
+   * not guessed: the first period of the trailing run in the rent series
+   * that already books at R11's exact amount (docs/ledger-spec.md §4.2's
+   * "genau diese 486,23 taucht als letzte Zeile der Mietserie auf"). */
+  validSincePeriod: string;
+  /** `nextPeriod(lastRentPeriod)` — the first period the imported rent series
+   * did NOT already cover, and therefore the only safe `fixed_cost_plans
+   * .startPeriod` (ledger-spec.md §4.7, review findings #3/#4: an earlier
+   * value would have the live plan re-book a period the import already did). */
+  planStartPeriod: string;
+}
+
+/** Splits `R8`'s formula text (`"1060+124+46.71+…"`) into its six cent amounts. */
+function parseFixedCostFormulaCents(formula: string): number[] {
+  return formula.split("+").map((token) => {
+    const value = Number(token.trim());
+    if (!Number.isFinite(value)) throw new Error(`[import-xlsx] unparsable fixed-cost formula token: "${token}" (R8)`);
+    return Math.round(value * 100);
+  });
+}
+
+function extractPlanSeed(workbook: XlsxWorkbook, rentBookings: { period: string; amountCents: number }[]): PlanSeed {
+  const r5 = workbook.cells.get("R5");
+  const r6 = workbook.cells.get("R6");
+  const r8 = workbook.cells.get("R8");
+  const ownerSalaryCents = parseAmountCell(r5, workbook.sharedStrings);
+  const partnerSalaryCents = parseAmountCell(r6, workbook.sharedStrings);
+  if (ownerSalaryCents === null || partnerSalaryCents === null) {
+    throw new Error("[import-xlsx] R5/R6 (salaries) did not parse as amounts");
+  }
+  if (!r8?.formula) throw new Error("[import-xlsx] R8 (monthly fixed costs) has no formula to split into line items");
+  const fixedCostItemCents = parseFixedCostFormulaCents(r8.formula);
+
+  // Walk backwards from the end of the rent series while the amount matches
+  // the LAST booking's amount — that trailing run is the currently-valid
+  // income-proportional share, and its first period is when it started.
+  const lastAmount = rentBookings.at(-1)?.amountCents;
+  let i = rentBookings.length - 1;
+  while (i > 0 && lastAmount !== undefined && rentBookings[i - 1]!.amountCents === lastAmount) i--;
+  const validSincePeriod = rentBookings[i]?.period ?? RENT_SERIES_START;
+  const lastRentPeriod = rentBookings.at(-1)?.period ?? RENT_SERIES_START;
+
+  return {
+    ownerSalaryCents,
+    partnerSalaryCents,
+    fixedCostItemCents,
+    validSincePeriod,
+    planStartPeriod: nextPeriod(lastRentPeriod),
+  };
+}
+
+/**
+ * Labels for the six `R8` summands — the sheet names NONE of them (docs/spec.md §8.1 #3), so every
+ * one of these is this importer's chosen label, not a fact read from the workbook. Fixed by AMOUNT,
+ * matching docs/ledger-spec.md §4.1's table exactly (`Miete`/`Nebenkosten`/`Strom`/`Internet` are
+ * named there as a deliberate choice, not a guess this file makes independently) — falls back to a
+ * generic placeholder only for an amount that table does not anticipate, which the user renames on
+ * first opening `/plan` (categories.renameHint's pattern, docs/spec.md §8.1 #5).
+ */
+function fixedCostItemLabels(amountsCents: readonly number[]): string[] {
+  const knownLabels: Record<number, string> = { 106_000: "Miete", 12_400: "Nebenkosten", 4_671: "Strom", 1_836: "Internet" };
+  let streamingSeen = 0;
+  return amountsCents.map((amountCents) => {
+    if (knownLabels[amountCents]) return knownLabels[amountCents]!;
+    if (amountCents === 1_499) {
+      streamingSeen += 1;
+      return `Streaming ${streamingSeen}`;
+    }
+    return `Fixkosten (${formatCents(amountCents)})`; // an amount docs/ledger-spec.md §4.1 did not anticipate
+  });
+}
+
 /* -------------------------------------------------------------------------- */
 /* Import records — the shape every transaction takes before it becomes a DB  */
 /* row (or a --dry-run report line)                                          */
 /* -------------------------------------------------------------------------- */
 
-interface ImportRecord {
+export interface ImportRecord {
   externalKey: string;
   payer: "P1" | "P2";
   splitMode: "SPLIT_EQUAL" | "OTHER_ONLY" | "SETTLEMENT";
@@ -202,14 +295,14 @@ interface ImportRecord {
   tags: string[];
 }
 
-interface ColumnReport {
+export interface ColumnReport {
   label: string;
   count: number;
   sumCents: number;
   skippedNoAmount: { row: number; label: string }[];
 }
 
-interface ImportResult {
+export interface ImportResult {
   records: ImportRecord[];
   columnReports: ColumnReport[];
   rentSeries: { pairs: RentSeriesPair[]; bookings: number; sumCents: number };
@@ -219,9 +312,10 @@ interface ImportResult {
   categorized: number;
   uncategorized: number;
   unparsable: UnparsableCell[];
+  planSeed: PlanSeed;
 }
 
-function buildImport(workbook: XlsxWorkbook, excelTextQuirk: boolean, importDate: CalendarDate): ImportResult {
+export function buildImport(workbook: XlsxWorkbook, excelTextQuirk: boolean, importDate: CalendarDate): ImportResult {
   const records: ImportRecord[] = [];
   const columnReports: ColumnReport[] = [];
   const precisionCounts: Record<"day" | "month" | "estimated", number> = { day: 0, month: 0, estimated: 0 };
@@ -331,6 +425,7 @@ function buildImport(workbook: XlsxWorkbook, excelTextQuirk: boolean, importDate
     amountCents: r.amountCents,
   }));
   const balanceCents = computeBalance(balanceTxs, "P1");
+  const planSeed = extractPlanSeed(workbook, rentBookings);
 
   return {
     records,
@@ -342,6 +437,7 @@ function buildImport(workbook: XlsxWorkbook, excelTextQuirk: boolean, importDate
     categorized,
     uncategorized,
     unparsable,
+    planSeed,
   };
 }
 
@@ -419,6 +515,26 @@ function printReport(workbook: XlsxWorkbook, defaultResult: ImportResult, quirkR
   console.log("");
   console.log(`Saldo (default) ${formatCents(defaultResult.balanceCents)}`);
 
+  const seed = defaultResult.planSeed;
+  const seedComputation = computePlanForPeriod({
+    period: seed.validSincePeriod,
+    items: seed.fixedCostItemCents.map((amountCents) => ({ amountCents, activeFrom: seed.validSincePeriod, activeTo: null })),
+    incomes: [
+      { personId: "P1", amountCents: seed.ownerSalaryCents, validFrom: seed.validSincePeriod, validTo: null },
+      { personId: "P2", amountCents: seed.partnerSalaryCents, validFrom: seed.validSincePeriod, validTo: null },
+    ],
+    payerId: "P1",
+    otherId: "P2",
+  });
+  console.log("");
+  console.log(`Fixed-cost plan seed (Q5:R11), valid since ${seed.validSincePeriod}, plan starts ${seed.planStartPeriod}`);
+  console.log(`  income total    ${formatCents(seedComputation.incomeTotalCents).padStart(14)}   (${seedComputation.incomeTotalCents} ct)`);
+  console.log(`  fixed cost total${formatCents(seedComputation.costTotalCents).padStart(14)}   (${seedComputation.costTotalCents} ct)`);
+  console.log(`  share(P2)       ${formatCents(seedComputation.bookableCents).padStart(14)}   (${seedComputation.bookableCents} ct)`);
+  console.log(
+    `  share(P1)       ${formatCents(seedComputation.costTotalCents - seedComputation.bookableCents).padStart(14)}   (${seedComputation.costTotalCents - seedComputation.bookableCents} ct)`,
+  );
+
   return { ok };
 }
 
@@ -426,10 +542,31 @@ function printReport(workbook: XlsxWorkbook, defaultResult: ImportResult, quirkR
 /* DB write (skipped entirely for --dry-run)                                 */
 /* -------------------------------------------------------------------------- */
 
-async function writeToHousehold(householdId: string, result: ImportResult): Promise<void> {
-  // Imported lazily so --dry-run never touches the database module (and
-  // therefore never requires DATABASE_URL / migrations to be present).
-  const { db, client } = await import("../src/db/client.ts");
+export interface WriteImportResult {
+  inserted: number;
+  alreadyPresent: number;
+}
+
+/**
+ * The actual DB write, factored out from `main()` so it can run against an
+ * ALREADY-OPEN `db` handle — the shared `apps/api/test` connection in
+ * particular (apps/api/test/import-haushalt.test.ts), which must never be
+ * closed out from under the rest of the test suite. `main()`'s CLI path is
+ * the only caller that opens its own connection and closes it afterwards.
+ *
+ * Idempotency is scoped to `(householdId, externalKey)` — matching the
+ * `transactions_household_external_key_uidx` unique index this mirrors
+ * (db/schema.ts) — NOT `externalKey` alone. A second household in the same
+ * database (a demo seed next to the real one, or a second real import) would
+ * otherwise see the first household's rows under the same `xlsx:*` keys and
+ * report every one of them as "already present" without ever having written
+ * anything for itself (review finding: `import-xlsx.ts` idempotency check).
+ */
+export async function writeImportRecords(
+  db: Database,
+  householdId: string,
+  records: readonly ImportRecord[],
+): Promise<WriteImportResult> {
   const { transactions } = await import("../src/db/schema.ts");
   const { slot1UserId, requireOtherMemberId } = await import("../src/services/households/members.service.ts");
   const { categoryIdBySlug } = await import("../src/services/categories/categories.service.ts");
@@ -449,11 +586,11 @@ async function writeToHousehold(householdId: string, result: ImportResult): Prom
   let alreadyPresent = 0;
 
   await withTransaction(db, async (tx) => {
-    for (const record of result.records) {
+    for (const record of records) {
       const existing = await tx
         .select({ id: transactions.id })
         .from(transactions)
-        .where(eq(transactions.externalKey, record.externalKey))
+        .where(and(eq(transactions.householdId, householdId), eq(transactions.externalKey, record.externalKey)))
         .limit(1);
       if (existing[0]) {
         alreadyPresent++;
@@ -487,9 +624,91 @@ async function writeToHousehold(householdId: string, result: ImportResult): Prom
     }
   });
 
-  console.log("");
-  console.log(`[import-xlsx] wrote ${inserted} new transaction(s), ${alreadyPresent} already present (idempotent re-run).`);
-  await client.close();
+  return { inserted, alreadyPresent };
+}
+
+export interface SeedPlanResult {
+  seeded: boolean;
+  itemCount: number;
+  incomeCount: number;
+}
+
+/**
+ * Seeds the fixed-cost plan itself from `Q5:R11` — without this, the
+ * importer writes 310 historical transactions but the app's actual reason
+ * for existing (the income-proportional monthly booking) cannot start,
+ * because `fixed_cost_items`/`incomes` stay empty and nobody can read the
+ * six amounts out of an Excel FORMULA (review finding: importer never seeded
+ * the plan). Idempotent by construction: it only ever seeds an EMPTY plan —
+ * if either table already has a row for this household (a previous import
+ * run, or the user already set the plan up by hand), it does nothing and
+ * reports `seeded: false`, never a second, duplicate set of items/incomes.
+ */
+export async function seedFixedCostPlan(db: Database, householdId: string, seed: PlanSeed): Promise<SeedPlanResult> {
+  const { fixedCostItems, incomes, fixedCostPlans } = await import("../src/db/schema.ts");
+  const { slot1UserId, requireOtherMemberId } = await import("../src/services/households/members.service.ts");
+  const { withTransaction } = await import("../src/services/support.ts");
+
+  const p1Id = await slot1UserId(db, householdId);
+  const p2Id = await requireOtherMemberId(db, householdId, p1Id);
+
+  return withTransaction(db, async (tx) => {
+    const existingItems = await tx.select({ id: fixedCostItems.id }).from(fixedCostItems).where(eq(fixedCostItems.householdId, householdId)).limit(1);
+    const existingIncomes = await tx.select({ id: incomes.id }).from(incomes).where(eq(incomes.householdId, householdId)).limit(1);
+    if (existingItems.length > 0 || existingIncomes.length > 0) {
+      return { seeded: false, itemCount: 0, incomeCount: 0 };
+    }
+
+    const now = Date.now();
+    const labels = fixedCostItemLabels(seed.fixedCostItemCents);
+    for (const [index, amountCents] of seed.fixedCostItemCents.entries()) {
+      await tx.insert(fixedCostItems).values({
+        id: crypto.randomUUID(),
+        householdId,
+        label: labels[index]!,
+        amountCents,
+        activeFrom: seed.validSincePeriod,
+        activeTo: null,
+        position: index,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    await tx.insert(incomes).values([
+      {
+        id: crypto.randomUUID(),
+        householdId,
+        personId: p1Id,
+        amountCents: seed.ownerSalaryCents,
+        validFrom: seed.validSincePeriod,
+        validTo: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: crypto.randomUUID(),
+        householdId,
+        personId: p2Id,
+        amountCents: seed.partnerSalaryCents,
+        validFrom: seed.validSincePeriod,
+        validTo: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+
+    // startPeriod = the first period the import did NOT already book as rent
+    // (never seed.validSincePeriod itself — that is typically already
+    // covered by the imported rent series, and booking it again would be
+    // exactly the collision review findings #3/#4 fixed isPeriodBooked for).
+    await tx
+      .update(fixedCostPlans)
+      .set({ startPeriod: seed.planStartPeriod, enabled: true, updatedAt: now })
+      .where(eq(fixedCostPlans.householdId, householdId));
+
+    return { seeded: true, itemCount: seed.fixedCostItemCents.length, incomeCount: 2 };
+  });
 }
 
 /* -------------------------------------------------------------------------- */
@@ -522,7 +741,21 @@ async function main(): Promise<void> {
         : "[import-xlsx] no --household given: no database write performed.",
     );
   } else if (ok) {
-    await writeToHousehold(args.householdId!, defaultResult);
+    // Opened here, not inside `writeImportRecords` — that function also runs
+    // against the shared test connection, which must outlive this call.
+    const { db, client } = await import("../src/db/client.ts");
+    const { inserted, alreadyPresent } = await writeImportRecords(db, args.householdId!, defaultResult.records);
+    console.log("");
+    console.log(`[import-xlsx] wrote ${inserted} new transaction(s), ${alreadyPresent} already present (idempotent re-run).`);
+
+    const planSeedResult = await seedFixedCostPlan(db, args.householdId!, defaultResult.planSeed);
+    console.log(
+      planSeedResult.seeded
+        ? `[import-xlsx] seeded the fixed-cost plan: ${planSeedResult.itemCount} item(s), ${planSeedResult.incomeCount} income(s), enabled, startPeriod=${defaultResult.planSeed.planStartPeriod}.`
+        : "[import-xlsx] fixed-cost plan already has items/incomes — left untouched (idempotent re-run).",
+    );
+
+    await client.close();
   } else {
     console.error("[import-xlsx] reconciliation failed — skipping database write. See FAIL line above.");
   }
@@ -534,4 +767,10 @@ async function main(): Promise<void> {
   process.exit(0);
 }
 
-await main();
+// Guarded so `apps/api/test/import-haushalt.test.ts` can `import { buildImport,
+// writeImportRecords } from "../scripts/import-xlsx.ts"` for a real DB-write
+// integration test without ALSO running the CLI's argv parsing / process.exit
+// (Bun sets `import.meta.main` only for the entry module actually executed).
+if (import.meta.main) {
+  await main();
+}

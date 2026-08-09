@@ -18,7 +18,7 @@ import type {
   UpdatePlanRequest,
 } from "@toon/shared";
 import { comparePeriods, computePlanForPeriod, currentPeriod, periodsInclusive } from "@toon/shared";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull } from "drizzle-orm";
 import type { Database } from "../../db/client.ts";
 import {
   type AccrualRunRow,
@@ -77,11 +77,21 @@ async function listIncomeRows(db: DbLike, householdId: string): Promise<IncomeRo
   return db.select().from(incomes).where(eq(incomes.householdId, householdId)).orderBy(asc(incomes.validFrom));
 }
 
-async function isPeriodBooked(db: Database, householdId: string, period: string): Promise<boolean> {
+/**
+ * Whether ANY row already occupies this period — regardless of `origin`.
+ * Deliberately NOT filtered to `origin = 'fixed_plan'`: an imported rent-series
+ * row (`origin = 'import'`, `planPeriod` set by scripts/import/rent.ts) covers
+ * the period exactly as much as a live plan booking would, and the catch-up
+ * loop in accrual.service.ts relies on this same function to refuse booking a
+ * period a second time under a different `externalKey` namespace (the
+ * `xlsx:rent:*` vs. `fixedplan:*` collision docs/ledger-spec.md §4.7 requires
+ * to never happen, but the unique index alone cannot see across namespaces).
+ */
+export async function isPeriodBooked(db: DbLike, householdId: string, period: string): Promise<boolean> {
   const rows = await db
     .select({ id: transactions.id })
     .from(transactions)
-    .where(and(eq(transactions.householdId, householdId), eq(transactions.origin, "fixed_plan"), eq(transactions.planPeriod, period)))
+    .where(and(eq(transactions.householdId, householdId), eq(transactions.planPeriod, period)))
     .limit(1);
   return rows.length > 0;
 }
@@ -140,7 +150,34 @@ export async function getPlanResponse(db: Database, householdId: string): Promis
   };
 }
 
+/**
+ * The latest period ANY transaction already occupies — regardless of origin.
+ * Used to keep `startPeriod` from being moved onto or before a period the
+ * one-time xlsx import already booked as rent (review finding #3/#4,
+ * ledger-spec.md §4.7): without this check, `PATCH .../plan { startPeriod }`
+ * would happily accept a value inside the imported range, and the very next
+ * catch-up run would try to book those months a second time under
+ * `fixedplan:{hh}:{p}` — caught by `isPeriodBooked` in the run itself, but
+ * only AFTER the plan has already advertised (via `pendingPeriods`) periods
+ * it can never actually book. Failing fast here is cheaper and clearer.
+ */
+async function maxOccupiedPeriod(db: Database, householdId: string): Promise<string | null> {
+  const rows = await db
+    .select({ planPeriod: transactions.planPeriod })
+    .from(transactions)
+    .where(and(eq(transactions.householdId, householdId), isNotNull(transactions.planPeriod)))
+    .orderBy(desc(transactions.planPeriod))
+    .limit(1);
+  return rows[0]?.planPeriod ?? null;
+}
+
 export async function updatePlan(db: Database, householdId: string, input: UpdatePlanRequest): Promise<PlanResponse> {
+  if (input.startPeriod !== undefined) {
+    const occupied = await maxOccupiedPeriod(db, householdId);
+    if (occupied && comparePeriods(input.startPeriod, occupied) <= 0) {
+      throw ApiError.conflict("plan_period_locked", "server.plan.periodLocked");
+    }
+  }
   const patch: Partial<typeof fixedCostPlans.$inferInsert> = { updatedAt: nowMs() };
   if (input.enabled !== undefined) patch.enabled = input.enabled;
   if (input.payerId !== undefined) patch.payerId = input.payerId;

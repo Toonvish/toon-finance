@@ -1,14 +1,5 @@
 import { z } from "zod";
-import {
-  BooleanQuerySchema,
-  CentsSchema,
-  IdSchema,
-  IsoDateSchema,
-  NonZeroCentsSchema,
-  PaginationQuerySchema,
-  PeriodSchema,
-  listResponse,
-} from "./common.ts";
+import { BooleanQuerySchema, CentsSchema, IdSchema, IsoDateSchema, PaginationQuerySchema, PeriodSchema, listResponse } from "./common.ts";
 import { TagNameSchema } from "./tags.ts";
 
 /** The four kinds the create/edit flow and the list filter offer (docs/ledger-spec.md §2.2). */
@@ -29,9 +20,19 @@ export type TagRef = z.infer<typeof TagRefSchema>;
 
 export const TransactionDescriptionSchema = z.string().trim().min(1).max(200);
 
+/**
+ * `amountCents` is plain `CentsSchema` here, NOT the schema-level "forbid 0"
+ * refinement it might look like it wants — that refinement's error would
+ * always surface as generic `422 validation_failed` (every Zod issue does,
+ * `lib/errors.ts`'s `toApiError`), never as the dedicated `transaction_
+ * amount_zero` docs/spec.md §3.2/§3.6 promises API consumers can branch on.
+ * The zero check instead lives in `transactions.service.ts`, which throws
+ * `ApiError` directly with that exact code (review finding: a dead wire
+ * contract nobody ever produced).
+ */
 export const CreateTransactionRequestSchema = z.object({
   kind: TxKindSchema,
-  amountCents: NonZeroCentsSchema,
+  amountCents: CentsSchema,
   description: TransactionDescriptionSchema,
   categoryId: IdSchema.nullish(),
   /** Tag NAMES, not ids — unknown ones are created (docs/spec.md §3.6). */

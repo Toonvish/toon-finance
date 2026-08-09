@@ -97,14 +97,17 @@ apps/api/src/
   index.ts                 Bootstrap; KEIN cors() (single-origin)
   env.ts                   zod-validiert, lädt die Root-.env selbst, exit(1) mit lesbarer Liste
   db/{schema,client,migrate}.ts     client.ts setzt die PRAGMAs pro Connection — synchronous = FULL
-  lib/{errors,http,types,cookies,locale,validation,clock,xlsx}.ts
+  lib/{errors,http,types,cookies,locale,validation,clock}.ts
   lib/clock.ts             nowMs() + setClockForTest() — der Seam für zeitabhängige Plan-Tests
   middleware/session.ts    requireSession / optionalSession / loadSession
   middleware/household.ts  requireHousehold() — 401/404/403 in EINER Query, setzt memberSlot mit
   middleware/staticWeb.ts  serviert apps/web/dist, mountet LETZTER, besitzt den SPA-Fallback
   routes/{auth,households,transactions,categories,tags,plan,balance,settlements}.ts
   services/{auth,households,ledger,categories,tags,plan,mail}/
-  scripts/{migrate,seed,reset-password,plan-run,import-haushalt}.ts
+  scripts/{migrate,seed,reset-password,plan-run,import-xlsx}.ts
+  scripts/import/{xlsx-reader,amounts,dates,categorize,rent}.ts   [NICHT unter
+                           packages/shared/src/import/, obwohl das ursprünglich so geplant war —
+                           docs/spec.md §8.2 #16]
   test/                    ALLE API-Tests (test/, NICHT tests/ — das tsconfig inkludiert nur test/**)
 apps/web/src/
   router.tsx               der Route-Baum; Screens lazy über lib/lazy-page.tsx
@@ -118,7 +121,6 @@ apps/web/src/
   features/{auth,settings,household,transactions,overview,plan,categories}/
 packages/shared/src/
   money.ts ledger.ts period.ts plan.ts categories.ts tags.ts
-  import/{amounts,dates,categorize,rent}.ts
   schemas/*.ts   i18n/*.ts
 ```
 
@@ -193,12 +195,17 @@ Die ersten sechzehn sind aus `toon-recipe` übernommen (dort teuer gelernt, hier
    begründet `NORMAL` wörtlich mit *„the right trade for a recipe box, not for a ledger"*, und das hier
    ist das Kassenbuch. Der Preis (~5 ms pro Write) ist bei ein paar Dutzend Writes am Tag unsichtbar;
    die letzte committete Ausgleichszahlung nach einem Stromausfall zu verlieren, ist es nicht.
-2. **`bun test` erzwingt `NODE_ENV=test` → `DATABASE_URL = TEST_DATABASE_URL ?? "file::memory:"`.**
-   Eine Entwickler-`.env` kann Tests nie auf die echte DB zeigen. **Aber:** libSQL 0.17.4 öffnet für
-   `client.transaction()` eine zweite Connection, und bei `file::memory:` ist das eine brandneue, leere
-   DB — nach dem Commit sind alle Tabellen weg. `withTransaction` degradiert dort auf sequentielle
-   Statements. Ein Ledger, dessen Tests nie eine echte Transaktion sehen, testet seine wichtigste
-   Eigenschaft nicht: **`TEST_DATABASE_URL` zeigt auf eine temporäre Datei.**
+2. **`bun test` erzwingt `NODE_ENV=test` → `DATABASE_URL = TEST_DATABASE_URL ?? <frische Temp-Datei>`.**
+   Eine Entwickler-`.env` kann Tests nie auf die echte DB zeigen. Das ist **bereits** die richtige Wahl,
+   NICHT `file::memory:` (eine frühere Version dieses Gotchas behauptete das fälschlich, ebenso ein
+   Kommentar in `ci.yml` — beide sind jetzt korrigiert): libSQL 0.17.4 öffnet für `client.transaction()`
+   eine zweite Connection, und bei `file::memory:` wäre das eine brandneue, leere DB — nach dem Commit
+   wären alle Tabellen weg, und `withTransaction` würde dort still auf sequentielle Statements
+   degradieren. `env.ts`s `defaultTestDatabaseUrl()` erzeugt stattdessen pro Prozess EINE frische
+   `file:<tmpdir>/toon-finance-test-<uuid>.db`, geteilt von jeder Testdatei in diesem `bun test`-Lauf
+   (dieselbe Falle wie bei `file::memory:`, falls du dich fragst, warum keine Testdatei
+   `TEST_DATABASE_URL` selbst setzt: sie brauchen es nicht, der Default ist schon eine echte Datei). Ein
+   Ledger, dessen Tests nie eine echte Transaktion sehen, testet seine wichtigste Eigenschaft nicht.
 3. **`apps/api/tsconfig.json` inkludiert `test/**`, niemals `tests/`.** Ein Verzeichnis `apps/api/tests/`
    ist für `bun run typecheck` unsichtbar — die Tests laufen, aber nichts darin wird je typgeprüft.
 4. **`mock.module` leakt über Testdateien und bun stellt es nie wieder her**, und die
@@ -369,6 +376,57 @@ Die ersten sechzehn sind aus `toon-recipe` übernommen (dort teuer gelernt, hier
 42. **Ops-Ausgabe ist immer Englisch und geht nie durch den Katalog**: `console.*`, die
     env-Validierung beim Boot, alle CLI-Skripte, `Error.message`, die `accrual_runs.error`-Spalte.
     *Eine Sprache in einem Log ist ein Feature.*
+
+**Aus dem Review gelernt (Fachlogik + Architektur, siehe git log für die Fixes)**
+
+43. **„Diffe gegen den gebuchten Betrag" heißt: gegen den EFFEKTIVEN, nicht den ursprünglichen
+    `fixed_plan`-Betrag.** `recalculatePlan` muss jede bereits existierende
+    `fixed_plan_adjustment`-Zeile derselben Periode aufaddieren, bevor es den Delta gegen
+    `computePlanForPeriod` bildet. Sonst produziert eine ZWEITE Gehaltskorrektur denselben
+    `externalKey` wie die erste (`fixedplan-adj:{hh}:{p}:{urspr._bookedCents}`), `onConflictDoNothing`
+    verschluckt sie lautlos, und die Antwort lügt: `applied: true`, `adjustments: []`. Test: zwei
+    Korrekturen hintereinander, nicht nur eine (`apps/api/test/plan.test.ts`, „a SECOND retroactive
+    correction").
+44. **`lastBookedPeriod` darf nie über eine Periode hinweg vorrücken, die aus Datenmangel übersprungen
+    wurde.** Wird sie nur bei jeder ERFOLGREICH gebuchten Periode gesetzt (statt beim ersten
+    `plan_incomplete`-Skip einzufrieren), springt sie über die Lücke, sobald eine SPÄTERE Periode wieder
+    bebuchbar ist — und `catchUpRange` startet danach immer NACH `lastBookedPeriod`. Die Lücke ist dann
+    für immer weg, auch nachdem der Nutzer die fehlenden Item-/Income-Zeilen nachträgt: es gibt keinen
+    API-Weg zurück. Die Reparatur: `lastBooked` nur vorrücken, solange in DIESEM Lauf noch kein
+    `plan_incomplete`-Skip vorkam („Datenlücke" ≠ „schon anderswo gebucht" ≠ „Anteil ist zufällig 0" —
+    nur Ersteres darf einfrieren).
+45. **Ein `externalKey`-Namensraum-Unterschied (`fixedplan:*` vs. `xlsx:rent:*`) verhindert KEINE
+    Doppelbuchung derselben Periode** — der Unique-Index ist `(household_id, external_key)`, und zwei
+    verschiedene Strings für denselben Monat kollidieren dort nie. Der Catch-up-Loop UND `PATCH
+    …/plan { startPeriod }` müssen deshalb explizit auf `(household_id, plan_period)` prüfen, egal
+    welchen `origin` die vorhandene Zeile hat (`isPeriodBooked` in `plan.service.ts`) — sonst bucht ein
+    Haushalt, der vor dem xlsx-Import existierte (`startPeriod` defaultet auf die aktuelle Periode bei
+    Haushaltsanlage), seine importierte Mietserie ein zweites Mal. `plan_period_locked` (409) existierte
+    als Fehlercode und Katalogschlüssel bereits, wurde aber nirgends geworfen — der tote Code WAR die
+    fehlende Absicherung.
+46. **Eine Idempotenzprüfung, die einen zusammengesetzten Unique-Index nachbildet, muss auf ALLEN seinen
+    Spalten filtern, nicht nur der auffälligsten.** `transactions_household_external_key_uidx` ist
+    `(household_id, external_key)`; `scripts/import-xlsx.ts`s Vorab-`SELECT` filterte nur auf
+    `external_key`. In einer DB mit zwei Haushalten (Demo-Seed neben dem echten, oder ein zweiter
+    echter Import) sieht die Prüfung die Zeilen des ERSTEN Haushalts unter denselben `xlsx:*`-Keys,
+    meldet „N already present (idempotent re-run)" und schreibt für den zweiten Haushalt nichts — bei
+    vollem Erfolgs-Output.
+47. **Eine Zod-`.refine()` kann keinen eigenen Fehlercode auf die Leitung bringen.** Jeder
+    `ZodError` wird zu `422 validation_failed` (`lib/errors.ts`s `toApiError`) — der spezifische
+    Refinement-Key landet nur in `details[].i18n.key`, nie in `error.code`. Ein dokumentierter,
+    dedizierter Code wie `transaction_amount_zero` muss deshalb als expliziter `throw new
+    ApiError(422, "…", …)` im Service stehen, NICHT als Schema-Refinement — sonst verspricht der
+    Wire-Contract einen Code, den kein Client je in `error.code` sieht (CLAUDE.md's eigene Regel „auf
+    `code` branchen, nie auf `message`" wird damit für genau diesen Fall unmöglich einzuhalten).
+    `settlements.service.ts`s `settlement_amount_invalid`-Check macht es bereits richtig vor.
+48. **`R8` ist keine Betragszelle — ihr Wert ist die SUMME, ihre `formula` sind die sechs einzelnen
+    Beträge.** `"1060+124+46.71+18.36+14.99+14.99"` als Text, nicht sechs Zellen. Wer nur den
+    gecachten `value` liest (wie jede andere Betragszelle im Blatt), bekommt `127905` ct total und
+    verliert die sechs Einzelpositionen, aus denen `fixed_cost_items` bestehen muss — der Importer
+    schrieb deshalb ursprünglich 310 Transaktionen, aber nie den Fixkostenplan selbst (leere
+    `fixed_cost_items`/`incomes`, `startPeriod` nie über den Default hinaus bewegt), obwohl die Zahlen
+    die ganze Zeit im Blatt standen. `parseFixedCostFormulaCents` spaltet die Formel selbst, nicht den
+    Cache.
 
 ## Verifikations-Gates
 

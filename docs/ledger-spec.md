@@ -570,8 +570,27 @@ itself.
 
 The 14 rent rows are *not* modelled as plan periods. They are imported as ordinary
 `OTHER_ONLY` transactions with `externalKey = xlsx:rent:${period}` (§6.5). The live plan's
-`startPeriod` is `2026-08` — the first period the sheet had not yet booked. The two never collide,
-because their `externalKey` namespaces differ *and* their periods do not overlap.
+`startPeriod` is meant to be `2026-08` — the first period the sheet had not yet booked — but
+their `externalKey` namespaces differing is not, by itself, what keeps the two from colliding:
+`fixedplan:{hh}:{p}` and `xlsx:rent:{p}` are different strings, so the unique index on
+`(household_id, external_key)` cannot see that they name the SAME period.
+
+Two things enforce the non-overlap for real:
+
+* **The catch-up loop checks `planPeriod` occupancy directly**, across every `origin`, before it
+  ever attempts a booking (`isPeriodBooked` in `plan.service.ts`, reused from `accrual.service.ts`).
+  A period the import already covers is reported back as `skipped`, not booked a second time — this
+  is what protects a household whose plan's `startPeriod` was ALREADY inside the imported range
+  before anyone noticed (the household row predates the import, or `startPeriod` was never moved
+  forward after running it).
+* **`PATCH …/plan { startPeriod }` refuses to move `startPeriod` onto or before an occupied
+  period** (`409 plan_period_locked`) — the same occupancy check, run proactively instead of only
+  when a catch-up would otherwise duplicate the booking.
+
+Both exist because a household can end up in the overlapping state in more than one way (an
+household created before the import ever ran; an operator who never advanced `startPeriod` after
+importing; a second import over restored data) — a purely convention-based non-overlap ("periods
+happen not to overlap") is not something this ledger can promise on its own.
 
 The alternative — reconstructing 50 periods of salary/cost history so the plan could regenerate them
 — is not possible: the sheet records only the *result* per period (the rent amount), never the

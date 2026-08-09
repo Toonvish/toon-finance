@@ -20,7 +20,7 @@ import { withTransaction } from "../support.ts";
 import { toTransactionResponse } from "../ledger/transactions.service.ts";
 import { syncTransactionTags } from "../tags/tags.service.ts";
 import { catchUpRange, isPlanComputable, periodAsMonthSlashYear } from "./period-scan.ts";
-import { listIncomeRows, listItemRows, loadPlanRow, toAccrualRunResponse } from "./plan.service.ts";
+import { isPeriodBooked, listIncomeRows, listItemRows, loadPlanRow, toAccrualRunResponse } from "./plan.service.ts";
 
 /** The fixed-cost plan books into this category (docs/spec.md §2.6, §3.7). */
 const PLAN_CATEGORY_SLUG = "fixkosten";
@@ -120,19 +120,47 @@ export async function runCatchUp(db: Database, householdId: string, options: Run
       const bookedPeriods: string[] = [];
       const skippedPeriods: string[] = [];
       let bookedCents = 0;
-      let anyComplete = false;
+      // true once a period is skipped for lack of data (ledger-spec.md §4.5's
+      // "gap"). `lastBookedPeriod` must never advance PAST such a period —
+      // otherwise the next run's `catchUpRange` starts after it and the gap
+      // can never be booked again, even once the missing data is filled in
+      // (docs/spec.md's "catch-up books every missed period" would silently
+      // stop being true). A period skipped for any OTHER reason (already
+      // covered by an import, or a genuine zero share) is fully resolved, so
+      // it is safe to advance past as long as no real gap came before it.
+      let dataGapSeen = false;
+      // true once at least one candidate period resolved to *something* —
+      // covered, zero-share, or booked. Stays false only when EVERY candidate
+      // failed `isPlanComputable`, which is the one case `plan_incomplete`
+      // (`throwOnIncomplete`) should actually fire for.
+      let anyResolved = false;
       let lastBooked = plan.lastBookedPeriod;
 
       for (const period of candidatePeriods) {
-        if (!isPlanComputable(items, incomeRows, period, plan.payerId, otherId)) {
+        // Already occupied by ANY origin — most commonly the one-time xlsx
+        // import's rent series (`xlsx:rent:<period>`, ledger-spec.md §4.7).
+        // Its `externalKey` lives in a different namespace than
+        // `fixedplan:{hh}:{period}`, so the unique index below would never
+        // catch this on its own — without this check the period would be
+        // booked TWICE, once by the import and once by this loop.
+        if (await isPeriodBooked(tx, householdId, period)) {
           skippedPeriods.push(period);
+          anyResolved = true;
+          if (!dataGapSeen) lastBooked = period;
           continue;
         }
-        anyComplete = true;
+
+        if (!isPlanComputable(items, incomeRows, period, plan.payerId, otherId)) {
+          skippedPeriods.push(period);
+          dataGapSeen = true;
+          continue;
+        }
+        anyResolved = true;
 
         const computation = computePlanForPeriod({ period, items, incomes: incomeRows, payerId: plan.payerId, otherId });
         if (computation.bookableCents === 0) {
           skippedPeriods.push(period);
+          if (!dataGapSeen) lastBooked = period;
           continue;
         }
 
@@ -170,16 +198,17 @@ export async function runCatchUp(db: Database, householdId: string, options: Run
           await syncTransactionTags(tx, householdId, id, ["fixkosten", "auto"]);
           bookedPeriods.push(period);
           bookedCents += computation.bookableCents;
-          lastBooked = period;
+          if (!dataGapSeen) lastBooked = period;
         } else {
           // Another concurrent run already booked this exact period.
           skippedPeriods.push(period);
+          if (!dataGapSeen) lastBooked = period;
         }
       }
 
       await tx.update(fixedCostPlans).set({ lastBookedPeriod: lastBooked, updatedAt: nowMs() }).where(eq(fixedCostPlans.householdId, householdId));
 
-      return { bookedPeriods, skippedPeriods, bookedCents, allIncomplete: !anyComplete && skippedPeriods.length > 0 };
+      return { bookedPeriods, skippedPeriods, bookedCents, allIncomplete: !anyResolved && candidatePeriods.length > 0 };
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -232,6 +261,15 @@ interface RecalculationLine {
  * `fixed_plan_adjustment` transaction (never an edit of the booked row).
  * `externalKey` encodes the superseded amount, so re-running against
  * unchanged data collides (no-op) while a second correction gets its own key.
+ *
+ * "Superseded amount" means the EFFECTIVE booked amount — the original
+ * `fixed_plan` row PLUS every `fixed_plan_adjustment` already booked for that
+ * same period — not the original row alone. A second retroactive correction
+ * of the same period must diff against what the first correction left
+ * behind, otherwise its `externalKey` collides with the first adjustment's
+ * (both would encode the same original amount) and `onConflictDoNothing`
+ * silently drops it: `applied: true` but `adjustments: []`, and the ledger
+ * never learns about the second change at all (ledger-spec.md §4.6).
  */
 export async function recalculatePlan(db: Database, householdId: string, viewerId: string, dryRun: boolean): Promise<RecalculatePlanResponse> {
   const plan = await loadPlanRow(db, householdId);
@@ -245,16 +283,27 @@ export async function recalculatePlan(db: Database, householdId: string, viewerI
     .select()
     .from(transactions)
     .where(and(eq(transactions.householdId, householdId), eq(transactions.origin, "fixed_plan")));
+  const adjustmentRows = await db
+    .select()
+    .from(transactions)
+    .where(and(eq(transactions.householdId, householdId), eq(transactions.origin, "fixed_plan_adjustment")));
+
+  const adjustmentSumByPeriod = new Map<string, number>();
+  for (const adj of adjustmentRows) {
+    if (!adj.planPeriod) continue;
+    adjustmentSumByPeriod.set(adj.planPeriod, (adjustmentSumByPeriod.get(adj.planPeriod) ?? 0) + adj.amountCents);
+  }
 
   const lines: RecalculationLine[] = [];
   if (otherId) {
     for (const row of bookedRows) {
       if (!row.planPeriod) continue;
       if (!isPlanComputable(items, incomeRows, row.planPeriod, plan.payerId, otherId)) continue;
+      const effectiveBookedCents = row.amountCents + (adjustmentSumByPeriod.get(row.planPeriod) ?? 0);
       const computation = computePlanForPeriod({ period: row.planPeriod, items, incomes: incomeRows, payerId: plan.payerId, otherId });
-      const delta = computation.bookableCents - row.amountCents;
+      const delta = computation.bookableCents - effectiveBookedCents;
       if (delta !== 0) {
-        lines.push({ period: row.planPeriod, bookedCents: row.amountCents, recomputedCents: computation.bookableCents, deltaCents: delta });
+        lines.push({ period: row.planPeriod, bookedCents: effectiveBookedCents, recomputedCents: computation.bookableCents, deltaCents: delta });
       }
     }
   }
