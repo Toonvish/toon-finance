@@ -6,19 +6,30 @@
  * `packages/shared/test/fixtures/haushalt-xlsx.ts` so they are never re-typed
  * a second time.
  *
- * The one exception is the "against a temp-file DB" section at the bottom
- * (docs/spec.md §7.6): THAT one reads the real workbook and writes through
- * `writeImportRecords` against the shared `db` connection — which, under
- * `bun test`, already IS a fresh temp-file database (env.ts's
- * `defaultTestDatabaseUrl()`) — because the write path's idempotency
- * (`(householdId, externalKey)`, not `externalKey` alone) and its household
- * scoping are exactly what small hand-built fixtures cannot exercise. That
- * section SKIPS when the workbook is absent: it holds real household finances
- * and is gitignored, so a fresh clone has everything except those five
- * cross-checks.
+ * The exception is the write path (docs/spec.md §7.6), which needs a whole
+ * workbook and a real database — `bun test`'s `db` already IS a fresh
+ * temp-file DB (env.ts's `defaultTestDatabaseUrl()`). It is covered TWICE, on
+ * purpose, because the two runs prove different things:
+ *
+ *   1. Against a SYNTHETIC workbook (`support/synthetic-workbook.ts`), always,
+ *      including CI. Invented amounts, same shape. This is what actually
+ *      guards the write path — idempotency on `(householdId, externalKey)`
+ *      rather than `externalKey` alone, per-household scoping, the plan seed
+ *      coming out of `R8`'s formula instead of its cached value, the
+ *      `--excel-text-quirk` switch, the CLI wiring. Both of those first two
+ *      were real bugs, and both are caught by this block today.
+ *   2. Against the REAL `Haushalt.xlsx`, when it happens to be next to the
+ *      repo. That run proves one thing the synthetic one never can: that
+ *      `packages/shared/test/fixtures/haushalt-xlsx.ts` still agrees with the
+ *      sheet those numbers were extracted from. The workbook is the operator's
+ *      household finances and is gitignored, so this block SKIPS on a fresh
+ *      clone — a generated workbook could not stand in for it without the
+ *      check becoming a tautology.
  */
-import { existsSync } from "node:fs";
-import { describe, expect, test } from "bun:test";
+import { existsSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, describe, expect, test } from "bun:test";
 import { and, eq } from "drizzle-orm";
 import {
   COLUMN_B,
@@ -42,6 +53,7 @@ import { db } from "../src/db/client.ts";
 import { runMigrations } from "../src/db/migrate.ts";
 import { fixedCostItems, fixedCostPlans, incomes, transactions } from "../src/db/schema.ts";
 import { body, call, createHousehold, createUser, type TestUser } from "./support/harness.ts";
+import { writeSyntheticWorkbook } from "./support/synthetic-workbook.ts";
 
 await runMigrations(db);
 
@@ -396,6 +408,192 @@ async function joinAsSecondMember(owner: TestUser, householdId: string, member: 
   const accept = await call("/api/households/invites/accept", { method: "POST", cookie: member.cookie, body: { token } });
   expect(accept.status).toBe(200);
 }
+
+/* -------------------------------------------------------------------------- */
+/* §7.6 the write path — against a SYNTHETIC workbook, so CI has it too       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Everything below runs everywhere, including a fresh clone with no
+ * `Haushalt.xlsx`. It uses a generated workbook of the same shape
+ * (`support/synthetic-workbook.ts`) with invented amounts, which covers the
+ * write path's real hazards — idempotency, per-household scoping, the plan
+ * seed coming out of `R8`'s FORMULA, the text-cell quirk, the CLI wiring —
+ * without needing anyone's finances.
+ *
+ * Every expected number here is derived by hand from `SYNTHETIC`, in the
+ * comments, and was written down BEFORE the pipeline was run against it. That
+ * is the whole point: a fixture generated from the fixture would only prove
+ * it equals itself.
+ */
+const SYNTHETIC_XLSX_PATH = join(tmpdir(), `toon-finance-synthetic-${crypto.randomUUID()}.xlsx`);
+writeSyntheticWorkbook(SYNTHETIC_XLSX_PATH);
+// It has to be a real file on disk, not a buffer: the CLI test below spawns
+// the actual script and hands it a path. So it also has to be cleaned up —
+// one stray workbook per test run adds up on a developer machine.
+afterAll(() => rmSync(SYNTHETIC_XLSX_PATH, { force: true }));
+
+/*
+ * A/B  P1 pays, SPLIT_EQUAL:  100,00 + 50,01 − 20,00      (row 5 has no amount -> skipped)
+ * D/E  P2 pays, SPLIT_EQUAL:  30,00 + 25,00 (cached formula)
+ * G/H  P1 pays, OTHER_ONLY:   40,00 + 28,93 (TEXT cell)
+ * M/N  rent, OTHER_ONLY:      2 × 100,00 + 3 × 200,00     -> 2022-06 .. 2022-10
+ * K4   SETTLEMENT:            500,00
+ *
+ * rows            = 3 + 2 + 2 + 5 + 1                              = 13
+ * splitOther      = +(5000 + 2500 − 1000) − (1500 + 1250)          = +3750
+ *                     └ halfForOther(5001) = 2500: the payer keeps the odd cent
+ * forOther        = (4000 + 2893) + (2×10000 + 3×20000)            = +86 893
+ * settled         = −50 000
+ * balance         = 3750 + 86 893 − 50 000                         = +40 643
+ */
+const SYNTHETIC_ROW_COUNT = 13;
+const SYNTHETIC_BALANCE_CENTS = 40_643;
+/** The one text-typed cell, the only thing `--excel-text-quirk` may change. */
+const SYNTHETIC_TEXT_CELL_CENTS = 2_893;
+
+describe("writeImportRecords against a synthetic workbook (docs/spec.md §7.6)", () => {
+  test("reads the shape correctly: 13 rows, hand-derived balance, nothing unparsable", () => {
+    const result = buildImport(readWorkbook(SYNTHETIC_XLSX_PATH), false, REAL_IMPORT_DATE);
+    expect(result.records).toHaveLength(SYNTHETIC_ROW_COUNT);
+    expect(result.balanceCents).toBe(SYNTHETIC_BALANCE_CENTS);
+    expect(result.unparsable).toHaveLength(0);
+
+    // The row with a label and no amount is skipped, not imported as 0 —
+    // `0` is the one forbidden amount in this ledger.
+    expect(result.records.some((record) => record.amountCents === 0)).toBe(false);
+    expect(result.records.filter((record) => record.externalKey.startsWith("xlsx:B:"))).toHaveLength(3);
+
+    // The rent series expands to one OTHER_ONLY row per month, contiguous.
+    const rentPeriods = result.records.filter((r) => r.externalKey.startsWith("xlsx:rent:")).map((r) => r.planPeriod);
+    expect(rentPeriods).toEqual(["2022-06", "2022-07", "2022-08", "2022-09", "2022-10"]);
+  });
+
+  test("--excel-text-quirk drops exactly the text-typed cell and nothing else", () => {
+    const workbook = readWorkbook(SYNTHETIC_XLSX_PATH);
+    const withQuirk = buildImport(workbook, true, REAL_IMPORT_DATE);
+
+    // Excel's own SUM silently skips a German-decimal-comma cell. Reproducing
+    // that must cost exactly one row and exactly its amount — if the switch
+    // ever leaked into another cell, these two numbers would drift apart.
+    expect(withQuirk.records).toHaveLength(SYNTHETIC_ROW_COUNT - 1);
+    expect(withQuirk.balanceCents).toBe(SYNTHETIC_BALANCE_CENTS - SYNTHETIC_TEXT_CELL_CENTS);
+  });
+
+  test("buildImport never writes: calling it repeatedly changes nothing in the DB", async () => {
+    const workbook = readWorkbook(SYNTHETIC_XLSX_PATH);
+    const before = await db.select({ id: transactions.id }).from(transactions);
+    buildImport(workbook, false, REAL_IMPORT_DATE);
+    buildImport(workbook, true, REAL_IMPORT_DATE);
+    const after = await db.select({ id: transactions.id }).from(transactions);
+    expect(after.length).toBe(before.length);
+  });
+
+  test("writes each row once; re-running the same import writes nothing", async () => {
+    const owner = await createUser("SynOwner");
+    const partner = await createUser("SynPartner");
+    const householdId = await createHousehold(owner, "Synthetischer Import");
+    await joinAsSecondMember(owner, householdId, partner);
+
+    const result = buildImport(readWorkbook(SYNTHETIC_XLSX_PATH), false, REAL_IMPORT_DATE);
+
+    const firstRun = await writeImportRecords(db, householdId, result.records);
+    expect(firstRun.inserted).toBe(SYNTHETIC_ROW_COUNT);
+    expect(firstRun.alreadyPresent).toBe(0);
+
+    const secondRun = await writeImportRecords(db, householdId, result.records);
+    expect(secondRun.inserted).toBe(0);
+    expect(secondRun.alreadyPresent).toBe(SYNTHETIC_ROW_COUNT);
+
+    const rows = await db
+      .select({ id: transactions.id })
+      .from(transactions)
+      .where(and(eq(transactions.householdId, householdId), eq(transactions.origin, "import")));
+    expect(rows).toHaveLength(SYNTHETIC_ROW_COUNT); // nothing doubled
+  });
+
+  test("is scoped per household — a second household importing the same workbook is not swallowed by the first's externalKeys", async () => {
+    const ownerA = await createUser("SynOwnerA");
+    const partnerA = await createUser("SynPartnerA");
+    const householdA = await createHousehold(ownerA, "Syn Haushalt A");
+    await joinAsSecondMember(ownerA, householdA, partnerA);
+
+    const ownerB = await createUser("SynOwnerB");
+    const partnerB = await createUser("SynPartnerB");
+    const householdB = await createHousehold(ownerB, "Syn Haushalt B");
+    await joinAsSecondMember(ownerB, householdB, partnerB);
+
+    const result = buildImport(readWorkbook(SYNTHETIC_XLSX_PATH), false, REAL_IMPORT_DATE);
+
+    expect((await writeImportRecords(db, householdA, result.records)).inserted).toBe(SYNTHETIC_ROW_COUNT);
+
+    // The guarded bug reported every row as "already present" — it matched the
+    // unique index on `external_key` alone instead of `(household_id,
+    // external_key)` — and silently wrote nothing for the second household.
+    const b = await writeImportRecords(db, householdB, result.records);
+    expect(b.inserted).toBe(SYNTHETIC_ROW_COUNT);
+    expect(b.alreadyPresent).toBe(0);
+  });
+
+  test("seeds the fixed-cost plan from R8's FORMULA, not its cached value", async () => {
+    const owner = await createUser("SynPlanOwner");
+    const partner = await createUser("SynPlanPartner");
+    const householdId = await createHousehold(owner, "Syn Plan Seed");
+    await joinAsSecondMember(owner, householdId, partner);
+
+    const result = buildImport(readWorkbook(SYNTHETIC_XLSX_PATH), false, REAL_IMPORT_DATE);
+
+    // R8 is `600+100+50.5` with a cached `750.5`. Reading the cached value —
+    // which is what every OTHER amount cell in the sheet is read by — yields
+    // ONE item of 75 050 ct and loses the line items the plan is made of.
+    expect(result.planSeed.fixedCostItemCents).toEqual([60_000, 10_000, 5_050]);
+    expect(result.planSeed.fixedCostItemCents.reduce((a, b) => a + b, 0)).toBe(75_050);
+    expect(result.planSeed.ownerSalaryCents).toBe(300_000);
+    expect(result.planSeed.partnerSalaryCents).toBe(200_000);
+    // The trailing run of equal rent amounts (3 × 200,00) starts at 2022-08…
+    expect(result.planSeed.validSincePeriod).toBe("2022-08");
+    // …and the plan may only start AFTER the last period the import covered.
+    expect(result.planSeed.planStartPeriod).toBe("2022-11");
+
+    const seedResult = await seedFixedCostPlan(db, householdId, result.planSeed);
+    expect(seedResult.seeded).toBe(true);
+    expect(seedResult.itemCount).toBe(3);
+    expect(seedResult.incomeCount).toBe(2);
+
+    const items = await db.select().from(fixedCostItems).where(eq(fixedCostItems.householdId, householdId));
+    expect(items.reduce((sum, item) => sum + item.amountCents, 0)).toBe(75_050);
+
+    const planRows = await db.select().from(fixedCostPlans).where(eq(fixedCostPlans.householdId, householdId));
+    expect(planRows[0]?.startPeriod).toBe("2022-11");
+
+    // Idempotent: seeding an already-seeded household changes nothing.
+    expect((await seedFixedCostPlan(db, householdId, result.planSeed)).seeded).toBe(false);
+    const itemsAfter = await db.select({ id: fixedCostItems.id }).from(fixedCostItems).where(eq(fixedCostItems.householdId, householdId));
+    expect(itemsAfter).toHaveLength(3);
+
+    // And the seeded data really computes: share(P2) =
+    // round(200 000 × 75 050 / 500 000) = round(30 020) = 30 020 ct.
+    const preview = await body<{ bookableCents: number; costTotalCents: number; incomeTotalCents: number }>(
+      await call(`/api/households/${householdId}/plan/preview?period=2022-11`, { cookie: owner.cookie }),
+    );
+    expect(preview.costTotalCents).toBe(75_050);
+    expect(preview.incomeTotalCents).toBe(500_000);
+    expect(preview.bookableCents).toBe(30_020);
+  });
+
+  test("the CLI entry point: --dry-run without --household exits 0 and writes nothing, via the real subprocess", () => {
+    const proc = Bun.spawnSync({
+      cmd: ["bun", "run", "apps/api/scripts/import-xlsx.ts", SYNTHETIC_XLSX_PATH, "--dry-run"],
+      cwd: `${import.meta.dir}/../../..`,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const stdout = proc.stdout.toString();
+    expect(proc.exitCode).toBe(0);
+    expect(stdout).toContain(`Total transactions: ${SYNTHETIC_ROW_COUNT}`);
+    expect(stdout).toContain("no --household given: no database write performed.");
+  });
+});
 
 describe.skipIf(!HAS_WORKBOOK)("writeImportRecords against the real Haushalt.xlsx (docs/spec.md §7.6)", () => {
   test("writes exactly 310 rows once; re-running the same import writes nothing", async () => {
