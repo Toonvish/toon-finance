@@ -137,6 +137,62 @@ describe("POST /api/households/invites/accept", () => {
     expect(response.status).toBe(409);
     expect((await body<ErrorPayload>(response)).error.code).toBe("household_full");
   });
+
+  test("a SPENT token cannot seat a different person once the slot frees up again", async () => {
+    const owner = await createUser("Owner");
+    const householdId = await createHousehold(owner, "Verbrauchter Token");
+    const invitee = await createUser("Invitee");
+    const stranger = await createUser("Stranger");
+
+    const invite = await call(`/api/households/${householdId}/invites`, { method: "POST", cookie: owner.cookie, body: {} });
+    const { token } = await body<InviteResponse>(invite);
+
+    const accept = await call("/api/households/invites/accept", { method: "POST", cookie: invitee.cookie, body: { token } });
+    expect(accept.status).toBe(200);
+
+    // The invitee leaves again — allowed, they never booked anything — so slot
+    // 2 is free while the (unexpired) link is still floating around in a
+    // forwarded mail, a chat history, a browser's autocomplete.
+    const leave = await call(`/api/households/${householdId}/members/${invitee.id}`, { method: "DELETE", cookie: invitee.cookie });
+    expect(leave.status).toBe(204);
+
+    const reuse = await call("/api/households/invites/accept", { method: "POST", cookie: stranger.cookie, body: { token } });
+    expect(reuse.status).toBe(404);
+    expect((await body<ErrorPayload>(reuse)).error.code).toBe("invite_invalid");
+
+    // And the stranger really is not in the household.
+    const detail = await call(`/api/households/${householdId}`, { cookie: owner.cookie });
+    const payload = await body<{ members: { userId: string }[] }>(detail);
+    expect(payload.members.map((m) => m.userId)).toEqual([owner.id]);
+  });
+
+  test("the account that accepted may still replay its own token (idempotency survives)", async () => {
+    const owner = await createUser("Owner");
+    const householdId = await createHousehold(owner, "Replay erlaubt");
+    const invitee = await createUser("Invitee");
+
+    const invite = await call(`/api/households/${householdId}/invites`, { method: "POST", cookie: owner.cookie, body: {} });
+    const { token } = await body<InviteResponse>(invite);
+    await call("/api/households/invites/accept", { method: "POST", cookie: invitee.cookie, body: { token } });
+
+    const replay = await call("/api/households/invites/accept", { method: "POST", cookie: invitee.cookie, body: { token } });
+    expect(replay.status).toBe(200);
+    expect((await body<AcceptResponse>(replay)).alreadyMember).toBe(true);
+  });
+
+  test("the public preview stops advertising a spent invite", async () => {
+    const owner = await createUser("Owner");
+    const householdId = await createHousehold(owner, "Vorschau verbraucht");
+    const invitee = await createUser("Invitee");
+
+    const invite = await call(`/api/households/${householdId}/invites`, { method: "POST", cookie: owner.cookie, body: {} });
+    const { token } = await body<InviteResponse>(invite);
+    await call("/api/households/invites/accept", { method: "POST", cookie: invitee.cookie, body: { token } });
+
+    const preview = await call(`/api/households/invites/${token}`);
+    expect(preview.status).toBe(404);
+    expect((await body<ErrorPayload>(preview)).error.code).toBe("invite_invalid");
+  });
 });
 
 describe("DELETE /api/households/:householdId/invites/:inviteId", () => {

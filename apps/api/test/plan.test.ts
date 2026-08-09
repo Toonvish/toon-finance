@@ -95,6 +95,25 @@ describe("plan_incomplete", () => {
   });
 });
 
+describe("income rows", () => {
+  test("a second income row with the same validFrom is 409 conflict, not a 500", async () => {
+    setClockForTest(JAN);
+    const owner = await createUser("Owner");
+    const householdId = await createHousehold(owner, "Doppeltes Gehalt");
+
+    const payload = { personId: owner.id, amountCents: 300_000, validFrom: "2026-01" };
+    const first = await call(`/api/households/${householdId}/plan/incomes`, { method: "POST", cookie: owner.cookie, body: payload });
+    expect(first.status).toBe(201);
+
+    // `incomes_person_from_uidx` rejects this. The service catches it and is
+    // supposed to answer 409 — which only works if `isUniqueViolation` looks
+    // inside the `DrizzleQueryError` wrapper (see households.test.ts).
+    const second = await call(`/api/households/${householdId}/plan/incomes`, { method: "POST", cookie: owner.cookie, body: payload });
+    expect(second.status).toBe(409);
+    expect((await body<ErrorPayload>(second)).error.code).toBe("conflict");
+  });
+});
+
 describe("the income-proportional share", () => {
   test("matches the Haushalt.xlsx-derived figures exactly", async () => {
     setClockForTest(JAN);
@@ -504,5 +523,125 @@ describe("recalculate — booked periods are never edited", () => {
     const totalAdjustmentCents = adjustmentRows.reduce((sum, r) => sum + r.amountCents, 0);
     const balance = await body<{ balanceCents: number }>(await call(`/api/households/${householdId}/balance`, { cookie: owner.cookie }));
     expect(balance.balanceCents).toBe(48_623 + totalAdjustmentCents);
+  });
+
+  test("a period whose share rounded to ZERO is still correctable afterwards", async () => {
+    setClockForTest(JAN);
+    const owner = await createUser("Owner");
+    const partner = await createUser("Partner");
+    const householdId = await createHousehold(owner, "Nullanteil");
+    await joinAsSecondMember(owner, householdId, partner);
+
+    // 1 € of fixed costs against a 500 000 : 100 income split — the partner's
+    // share is round(100 × 100 / 500 100) = 0, so the run books NOTHING.
+    await call(`/api/households/${householdId}/plan/items`, {
+      method: "POST",
+      cookie: owner.cookie,
+      body: { label: "Mini-Fixkosten", amountCents: 100, activeFrom: "2026-01" },
+    });
+    await call(`/api/households/${householdId}/plan/incomes`, {
+      method: "POST",
+      cookie: owner.cookie,
+      body: { personId: owner.id, amountCents: 500_000, validFrom: "2026-01" },
+    });
+    await call(`/api/households/${householdId}/plan/incomes`, {
+      method: "POST",
+      cookie: owner.cookie,
+      body: { personId: partner.id, amountCents: 100, validFrom: "2026-01" },
+    });
+    await call(`/api/households/${householdId}/plan`, { method: "PATCH", cookie: owner.cookie, body: { enabled: true } });
+
+    const run = await body<RunPlanResponse>(
+      await call(`/api/households/${householdId}/plan/run`, { method: "POST", cookie: owner.cookie, body: {} }),
+    );
+    expect(run.bookedPeriods).toEqual([]);
+    expect(run.skippedPeriods).toEqual(["2026-01"]);
+    const rowsAfterRun = await db.select().from(transactions).where(eq(transactions.householdId, householdId));
+    expect(rowsAfterRun).toHaveLength(0); // no row at all — this is what hides the period
+
+    // …and the run still moved past it, so the catch-up loop will never return.
+    const planAfterRun = await body<PlanResponse>(await call(`/api/households/${householdId}/plan`, { cookie: owner.cookie }));
+    expect(planAfterRun.plan.lastBookedPeriod).toBe("2026-01");
+    expect(planAfterRun.pendingPeriods).toEqual([]);
+
+    // Retroactive correction: the partner really earned 500 000 in January,
+    // so their share becomes round(500 000 × 100 / 1 000 000) = 50 ct.
+    const partnerIncome = planAfterRun.incomes.find((i) => i.personId === partner.id)!;
+    await call(`/api/households/${householdId}/plan/incomes/${partnerIncome.id}`, {
+      method: "PATCH",
+      cookie: owner.cookie,
+      body: { amountCents: 500_000 },
+    });
+
+    const preview = await body<RecalculatePlanResponse>(
+      await call(`/api/households/${householdId}/plan/recalculate`, { method: "POST", cookie: owner.cookie, body: { dryRun: true } }),
+    );
+    // Without the fix this is `[]`: recalculate iterated `fixed_plan` ROWS, and
+    // a zero-share period has none — the 50 ct would be unreachable for good.
+    expect(preview.items).toHaveLength(1);
+    expect(preview.items[0]).toMatchObject({ period: "2026-01", bookedCents: 0, recomputedCents: 50, deltaCents: 50 });
+
+    const applied = await body<RecalculatePlanResponse>(
+      await call(`/api/households/${householdId}/plan/recalculate`, { method: "POST", cookie: owner.cookie, body: { dryRun: false } }),
+    );
+    expect(applied.applied).toBe(true);
+    expect(applied.adjustments).toHaveLength(1);
+    const balance = await body<{ balanceCents: number }>(await call(`/api/households/${householdId}/balance`, { cookie: owner.cookie }));
+    expect(balance.balanceCents).toBe(50);
+
+    // Re-running against unchanged data stays a no-op (externalKey collision).
+    const reapply = await body<RecalculatePlanResponse>(
+      await call(`/api/households/${householdId}/plan/recalculate`, { method: "POST", cookie: owner.cookie, body: { dryRun: false } }),
+    );
+    expect(reapply.items).toHaveLength(0);
+    expect(reapply.adjustments).toHaveLength(0);
+  });
+
+  test("a period covered by an IMPORT row is never given a plan adjustment", async () => {
+    setClockForTest(FEB);
+    const owner = await createUser("Owner");
+    const partner = await createUser("Partner");
+    const householdId = await createHousehold(owner, "Import deckt ab");
+    await joinAsSecondMember(owner, householdId, partner);
+    await seedFullPlan(owner, partner, householdId);
+
+    // The one-time xlsx rent series already owns 2026-01 (ledger-spec.md §4.7).
+    const timestamp = Date.now();
+    await db.insert(transactions).values({
+      id: crypto.randomUUID(),
+      householdId,
+      payerId: owner.id,
+      splitMode: "OTHER_ONLY",
+      amountCents: 48_623,
+      description: "Miete 01/2026",
+      categoryId: null,
+      bookedAt: timestamp,
+      dateSource: "exact",
+      origin: "import",
+      planPeriod: "2026-01",
+      categorySource: "manual",
+      importSeq: 1,
+      externalKey: `xlsx:rent:2026-01`,
+      createdBy: null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    await call(`/api/households/${householdId}/plan/run`, { method: "POST", cookie: owner.cookie, body: {} });
+
+    // Change the income so a recalculation WOULD want to adjust 2026-01…
+    const plan = await body<PlanResponse>(await call(`/api/households/${householdId}/plan`, { cookie: owner.cookie }));
+    const ownerIncome = plan.incomes.find((i) => i.personId === owner.id)!;
+    await call(`/api/households/${householdId}/plan/incomes/${ownerIncome.id}`, {
+      method: "PATCH",
+      cookie: owner.cookie,
+      body: { amountCents: 400_000 },
+    });
+
+    const preview = await body<RecalculatePlanResponse>(
+      await call(`/api/households/${householdId}/plan/recalculate`, { method: "POST", cookie: owner.cookie, body: { dryRun: true } }),
+    );
+    // …but 2026-01 belongs to the import, not to the plan. Only 2026-02 (which
+    // the plan really did book) may appear.
+    expect(preview.items.map((line) => line.period)).toEqual(["2026-02"]);
   });
 });

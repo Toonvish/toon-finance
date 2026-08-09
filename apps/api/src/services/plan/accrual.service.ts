@@ -8,7 +8,7 @@
  */
 import type { RecalculatePlanResponse, RunPlanResponse, TransactionResponse } from "@toon/shared";
 import { comparePeriods, computePlanForPeriod, currentPeriod, periodStartMs, periodsInclusive, serverText } from "@toon/shared";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import type { Database } from "../../db/client.ts";
 import { type AccrualRunRow, accrualRuns, fixedCostPlans, transactions } from "../../db/schema.ts";
 import { ApiError } from "../../lib/errors.ts";
@@ -270,6 +270,16 @@ interface RecalculationLine {
  * (both would encode the same original amount) and `onConflictDoNothing`
  * silently drops it: `applied: true` but `adjustments: []`, and the ledger
  * never learns about the second change at all (ledger-spec.md §4.6).
+ *
+ * The candidate set is NOT "every period that has a `fixed_plan` row". A
+ * period whose share came out as exactly 0 writes no row at all (`runCatchUp`'s
+ * `bookableCents === 0` branch) and still advances `lastBookedPeriod`, so a
+ * row-driven recalculation cannot see it and the catch-up loop never returns
+ * to it either — a later income/item correction that turns that share non-zero
+ * would be lost for good, with no API path back. `[startPeriod,
+ * lastBookedPeriod]` — every period a run has already walked past — is
+ * therefore part of the candidate set, and a period with no plan row simply
+ * diffs against 0.
  */
 export async function recalculatePlan(db: Database, householdId: string, viewerId: string, dryRun: boolean): Promise<RecalculatePlanResponse> {
   const plan = await loadPlanRow(db, householdId);
@@ -279,31 +289,48 @@ export async function recalculatePlan(db: Database, householdId: string, viewerI
   const items = await listItemRows(db, householdId);
   const incomeRows = await listIncomeRows(db, householdId);
 
-  const bookedRows = await db
-    .select()
+  // Every row claiming a plan period, in ONE query, partitioned by origin:
+  // `fixed_plan` + `fixed_plan_adjustment` together are the EFFECTIVE booked
+  // amount, while ANY other origin (the one-time xlsx rent series, a manual
+  // row carrying a planPeriod) means the plan deliberately never booked that
+  // month — `runCatchUp`'s `isPeriodBooked` skip — and must not start now.
+  const periodRows = await db
+    .select({ planPeriod: transactions.planPeriod, origin: transactions.origin, amountCents: transactions.amountCents })
     .from(transactions)
-    .where(and(eq(transactions.householdId, householdId), eq(transactions.origin, "fixed_plan")));
-  const adjustmentRows = await db
-    .select()
-    .from(transactions)
-    .where(and(eq(transactions.householdId, householdId), eq(transactions.origin, "fixed_plan_adjustment")));
+    .where(and(eq(transactions.householdId, householdId), isNotNull(transactions.planPeriod)));
 
+  const bookedByPeriod = new Map<string, number>();
   const adjustmentSumByPeriod = new Map<string, number>();
-  for (const adj of adjustmentRows) {
-    if (!adj.planPeriod) continue;
-    adjustmentSumByPeriod.set(adj.planPeriod, (adjustmentSumByPeriod.get(adj.planPeriod) ?? 0) + adj.amountCents);
+  const foreignPeriods = new Set<string>();
+  for (const row of periodRows) {
+    const period = row.planPeriod;
+    if (!period) continue;
+    if (row.origin === "fixed_plan") {
+      bookedByPeriod.set(period, (bookedByPeriod.get(period) ?? 0) + row.amountCents);
+    } else if (row.origin === "fixed_plan_adjustment") {
+      adjustmentSumByPeriod.set(period, (adjustmentSumByPeriod.get(period) ?? 0) + row.amountCents);
+    } else {
+      foreignPeriods.add(period);
+    }
+  }
+
+  const candidatePeriods = new Set<string>(bookedByPeriod.keys());
+  if (plan.lastBookedPeriod !== null && comparePeriods(plan.startPeriod, plan.lastBookedPeriod) <= 0) {
+    for (const period of periodsInclusive(plan.startPeriod, plan.lastBookedPeriod)) candidatePeriods.add(period);
   }
 
   const lines: RecalculationLine[] = [];
   if (otherId) {
-    for (const row of bookedRows) {
-      if (!row.planPeriod) continue;
-      if (!isPlanComputable(items, incomeRows, row.planPeriod, plan.payerId, otherId)) continue;
-      const effectiveBookedCents = row.amountCents + (adjustmentSumByPeriod.get(row.planPeriod) ?? 0);
-      const computation = computePlanForPeriod({ period: row.planPeriod, items, incomes: incomeRows, payerId: plan.payerId, otherId });
+    for (const period of candidatePeriods) {
+      if (!isPlanComputable(items, incomeRows, period, plan.payerId, otherId)) continue;
+      // Occupied by an import/manual row rather than by the plan: that period
+      // is somebody else's, and an adjustment on top would double-count it.
+      if (!bookedByPeriod.has(period) && foreignPeriods.has(period)) continue;
+      const effectiveBookedCents = (bookedByPeriod.get(period) ?? 0) + (adjustmentSumByPeriod.get(period) ?? 0);
+      const computation = computePlanForPeriod({ period, items, incomes: incomeRows, payerId: plan.payerId, otherId });
       const delta = computation.bookableCents - effectiveBookedCents;
       if (delta !== 0) {
-        lines.push({ period: row.planPeriod, bookedCents: effectiveBookedCents, recomputedCents: computation.bookableCents, deltaCents: delta });
+        lines.push({ period, bookedCents: effectiveBookedCents, recomputedCents: computation.bookableCents, deltaCents: delta });
       }
     }
   }

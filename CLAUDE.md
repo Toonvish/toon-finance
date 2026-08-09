@@ -443,6 +443,56 @@ Die ersten sechzehn sind aus `toon-recipe` übernommen (dort teuer gelernt, hier
     Dev-Modus eine erklärende `console.error`, falls die Origins auseinanderlaufen. Wer die API
     wirklich auf eine andere Origin legt, muss `cors()` mitliefern — beides hängt zusammen.
 
+**Aus dem zweiten Review (Code-Review über die ganze Codebase)**
+
+50. **Drizzle verpackt JEDEN Query-Fehler in einen `DrizzleQueryError`; die echte Meldung steht in
+    `cause`.** `error.message` ist nur `Failed query: insert into "incomes" …`, `error.code` ist
+    `undefined`, und `SQLITE_CONSTRAINT: UNIQUE constraint failed: …` liegt eine Ebene tiefer.
+    `isUniqueViolation` prüfte nur die oberste Ebene und lieferte damit für **jede** Unique-Verletzung
+    `false`, die dieses Repo überhaupt erzeugen kann — alle vier darauf gebauten 409er
+    (`email_taken`, `category_slug_taken`, der Income-Overlap, `household_full`) fielen still auf
+    einen unbehandelten **500** zurück. `POST …/plan/incomes` mit doppeltem `validFrom` antwortete
+    `internal_error`. Kein Test schlug an, weil `email_taken` als einziger getestet war und die
+    Register-Route die Adresse **vorher** nachschlägt und ihren eigenen catch nie erreicht. Die
+    Funktion läuft jetzt die `cause`-Kette entlang (tiefenbegrenzt). Wer eine Treiber-Fehlerform
+    prüft, prüft die Kette, nie nur die Spitze.
+51. **Query-Keys, die hierarchisch AUSSEHEN, sind es nicht.** TanStack matcht Präfixe pro
+    Array-**Element**: `["toon","household",hh,"transactions"]` trifft
+    `…,"transaction-summary",…` nicht, und `…,"balance"` trifft `…,"balance-history",…` nicht.
+    `invalidateAfterLedgerMutation` listete beide Nachbarn nicht auf — die Dashboard-Karten und der
+    Saldo-Verlauf zeigten nach jeder Buchung bis zu 30 s alte Zahlen, während der eigene Docstring
+    der Funktion behauptete, die Summary sei dabei. Ein vergessener Key wirft nichts; er zeigt
+    ruhig die Zahl von gestern. `apps/web/src/lib/queries.test.ts` pinnt den Fan-out.
+52. **Eine optimistische Löschung braucht ein `onError`, eine optimistische Anlage einen Filter.**
+    Die DELETE-Mutation entfernte die Zeile in `onMutate` und stellte sie nie wieder her — bei
+    `409 transaction_generated` (Plan-Zeilen sind nicht löschbar, und `shouldRetry` wiederholt keinen
+    4xx) blieb sie aus der UI verschwunden, obwohl sie serverseitig existiert. Umgekehrt schrieb
+    `patchListsWithOptimisticRow` per Präfix-Match in **jede** gecachte Listenvariante, auch in
+    Kategorie-, Zeitraum- und Seite-2-Filter, die die Zeile nicht enthalten dürfen. Offline pausiert
+    die Mutation, also korrigiert das niemand. Einfügen ist jetzt auf die ungefilterte erste Seite
+    beschränkt, Entfernen bleibt bewusst breit. Und ein DELETE räumt den Detail-Cache per
+    `removeQueries` ab, sonst rendert `/transactions/$id` die gelöschte Zeile weiter.
+53. **Eine Periode mit Anteil 0 schreibt keine Zeile, rückt `lastBookedPeriod` aber trotzdem vor.**
+    Damit war sie für beide Wege unsichtbar: der Catch-up startet nach `lastBookedPeriod`, und
+    `recalculatePlan` iterierte über `fixed_plan`-**Zeilen**. Eine spätere Gehaltskorrektur, die den
+    Anteil von 0 auf einen echten Betrag hebt, war endgültig verloren — ohne API-Weg zurück.
+    Die Kandidatenmenge ist jetzt „alle Perioden mit Plan-Zeile ∪ `[startPeriod, lastBookedPeriod]`",
+    und eine Periode ohne Plan-Zeile diffed gegen 0. Perioden, die einer **fremden** Herkunft
+    gehören (xlsx-Miete, manuell), bleiben ausgenommen — sonst bucht die Korrektur auf den Import obendrauf.
+54. **Ein angenommener Einladungstoken muss aufhören, eine Capability zu sein.**
+    `loadRedeemableInvite` prüfte `revoked` und Ablauf, aber nie `accepted`. Sobald die zweite Person
+    wieder austritt (`removeMember` gibt den Slot frei), setzte derselbe — noch nicht abgelaufene —
+    Link eine **beliebige** dritte Person in den Haushalt. Jetzt ist ein angenommener Token nur noch
+    für genau das Konto einlösbar, das ihn angenommen hat (`redeemerId`); das hält `acceptInvite`
+    idempotent und macht den Link für alle anderen zu `404 invite_invalid`.
+55. **Die Zeilenreihenfolge im Blatt ist NICHT chronologisch — nicht einmal auf Monatsebene.**
+    Spalte A Zeilen 18/20/28 sind `Obi 02.10`, `Obi 30.09`, `Lutz 29.09`. Ein „offensichtlicher" Fix
+    gegen invertierte Datumsauflösung (monotone Untergrenze pro Bracket) wurde gegen den echten
+    Korpus gemessen und schob `Obi 30.09` auf 2022-09-30, mit Jahresversatz für die 18 Zeilen darunter
+    und 4 verlorenen `day`-Präzisionen. Rückgängig gemacht, in `dates.ts` und im Test begründet.
+    *Ein Befund kann mechanisch stimmen und von den Daten widerlegt werden — am Korpus messen, nicht
+    am Modell im Kopf.*
+
 ## Verifikations-Gates
 
 Alle vier müssen sauber sein, bevor irgendetwas „fertig" heißt:

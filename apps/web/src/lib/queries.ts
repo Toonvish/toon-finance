@@ -308,6 +308,14 @@ export const invalidate = {
     qc.invalidateQueries({ queryKey: queryKeys.transactionsRoot(householdId) }),
   transaction: (qc: QueryClient, householdId: string, transactionId: string) =>
     qc.invalidateQueries({ queryKey: queryKeys.transaction(householdId, transactionId) }),
+  /**
+   * The dashboard's per-category/period totals. A SEPARATE key segment from
+   * `"transactions"` (`"transaction-summary"`), so `invalidate.transactions`
+   * does NOT reach it — prefix matching is per array element, and
+   * `"transaction-summary"` is not `"transactions"`.
+   */
+  transactionSummary: (qc: QueryClient, householdId: string) =>
+    qc.invalidateQueries({ queryKey: [ROOT, "household", householdId, "transaction-summary"] }),
   categories: (qc: QueryClient, householdId: string) =>
     qc.invalidateQueries({ queryKey: [ROOT, "household", householdId, "categories"] }),
   tags: (qc: QueryClient, householdId: string) =>
@@ -330,11 +338,22 @@ export const invalidate = {
  * so a single ledger write invalidates all of them together. This is the ONE
  * place that lists the fan-out, so `WEB-TX` and `WEB-SALDO` mutations agree
  * on what a booking touches without importing each other's feature code.
+ *
+ * Every derived read is listed EXPLICITLY, because none of them is a key
+ * prefix of another: `"transaction-summary"`, `"balance-history"` and
+ * `"settlements"` each sit on their own key segment, so invalidating
+ * `"transactions"` and `"balance"` leaves all three serving pre-mutation data
+ * until their staleTime runs out. `useCreateSettlement` funnels through here
+ * too — a settlement IS a transaction — which is why the settlements list
+ * belongs in the fan-out rather than only at the call site.
  */
 export async function invalidateAfterLedgerMutation(qc: QueryClient, householdId: string): Promise<void> {
   await Promise.all([
     invalidate.transactions(qc, householdId),
+    invalidate.transactionSummary(qc, householdId),
     invalidate.balance(qc, householdId),
+    invalidate.balanceHistory(qc, householdId),
+    invalidate.settlements(qc, householdId),
     invalidate.categories(qc, householdId),
     invalidate.tags(qc, householdId),
   ]);

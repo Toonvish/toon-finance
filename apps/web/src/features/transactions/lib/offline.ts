@@ -19,7 +19,7 @@
  * every replay, so anything coined inside them would mint a new id on every
  * retry and defeat `mutation_claims` (docs/spec.md §2.9, CLAUDE.md gotcha #10).
  */
-import type { QueryClient } from "@tanstack/react-query";
+import type { QueryClient, QueryKey } from "@tanstack/react-query";
 import {
   deltaForTransaction,
   halfForOther,
@@ -123,10 +123,40 @@ function buildOptimisticTransaction(
   };
 }
 
-/** Prepends `tx` to every cached transaction LIST page of this household (not the detail cache — there is no detail id yet). */
+type TransactionListPage = { items: TransactionResponse[]; total: number; limit: number; offset: number };
+
+/**
+ * Filter keys that do NOT restrict WHICH transactions a list contains. A new
+ * row belongs on every list keyed by these alone; every other key (`from`,
+ * `to`, `categoryId`, `payerId`, `kind`, `tagIds`, `q`, `origin`,
+ * `includeAggregates`) narrows the set to rows matching a predicate this file
+ * cannot evaluate without re-implementing the server's filtering.
+ */
+const NON_NARROWING_FILTER_KEYS: ReadonlySet<string> = new Set(["limit", "offset", "sort"]);
+
+/**
+ * Whether a cached list may receive the optimistic row: only the FIRST page of
+ * an UNFILTERED list. `setQueriesData` with the `transactionsRoot` prefix
+ * otherwise matches every filtered variant still in cache — a category view, a
+ * date range, page 3 — and prepends the row to all of them. Offline the
+ * mutation is paused, so a row sits in a list it does not belong to until the
+ * next reconnect and refetch; guessing wrong in a ledger is worse than
+ * showing the row one screen later.
+ */
+function acceptsOptimisticRow(queryKey: QueryKey): boolean {
+  const filters = queryKey[4];
+  if (filters === undefined) return true;
+  if (typeof filters !== "object" || filters === null) return false;
+  const entries = Object.entries(filters as Record<string, unknown>);
+  if (!entries.every(([key]) => NON_NARROWING_FILTER_KEYS.has(key))) return false;
+  const offset = (filters as { offset?: unknown }).offset;
+  return offset === undefined || offset === 0;
+}
+
+/** Prepends `tx` to every cached UNFILTERED transaction LIST page of this household (not the detail cache — there is no detail id yet). */
 function patchListsWithOptimisticRow(client: QueryClient, householdId: string, tx: TransactionResponse): void {
-  client.setQueriesData<{ items: TransactionResponse[]; total: number; limit: number; offset: number } | undefined>(
-    { queryKey: queryKeys.transactionsRoot(householdId) },
+  client.setQueriesData<TransactionListPage | undefined>(
+    { queryKey: queryKeys.transactionsRoot(householdId), predicate: (query) => acceptsOptimisticRow(query.queryKey) },
     (current) => {
       if (!current) return current;
       return { ...current, items: [tx, ...current.items], total: current.total + 1 };
@@ -134,8 +164,9 @@ function patchListsWithOptimisticRow(client: QueryClient, householdId: string, t
   );
 }
 
+/** Removal is deliberately NOT scoped the way insertion is — a row that is going away must go away everywhere. */
 function removeOptimisticRow(client: QueryClient, householdId: string, optimisticId: string): void {
-  client.setQueriesData<{ items: TransactionResponse[]; total: number; limit: number; offset: number } | undefined>(
+  client.setQueriesData<TransactionListPage | undefined>(
     { queryKey: queryKeys.transactionsRoot(householdId) },
     (current) => {
       if (!current) return current;
@@ -209,9 +240,27 @@ export function registerTransactionMutationDefaults(client: QueryClient = appQue
     retry: shouldRetry, // see the CREATE default above for why not `false`
     onMutate: async (variables) => {
       await client.cancelQueries({ queryKey: queryKeys.transactionsRoot(variables.householdId) });
+      // Snapshot exactly the pages that hold this row, so a REJECTED delete can
+      // put it back at its old position with the old `total`. The CREATE
+      // default rolls back the same way; without one here the row stays gone
+      // from the UI while it still exists on the server — and the everyday
+      // case is not exotic: a plan-generated row answers `409
+      // transaction_generated`, and `shouldRetry` never retries a 4xx.
+      const snapshot = client
+        .getQueriesData<TransactionListPage | undefined>({ queryKey: queryKeys.transactionsRoot(variables.householdId) })
+        .filter(([, data]) => data?.items.some((item) => item.id === variables.transactionId));
       removeOptimisticRow(client, variables.householdId, variables.transactionId);
+      return { snapshot };
+    },
+    onError: (_error, _variables, context) => {
+      const snapshot = (context as { snapshot?: [QueryKey, TransactionListPage | undefined][] } | undefined)?.snapshot;
+      for (const [key, data] of snapshot ?? []) client.setQueryData(key, data);
     },
     onSuccess: async (_data, variables) => {
+      // `removeQueries`, not `invalidate`: the entity is gone, so a refetch
+      // would only fetch a 404. Left in cache, `/transactions/$id` renders the
+      // deleted row from `STALE_TIME.detail` as if it still existed.
+      client.removeQueries({ queryKey: queryKeys.transaction(variables.householdId, variables.transactionId) });
       await invalidateAfterLedgerMutation(client, variables.householdId);
     },
   });

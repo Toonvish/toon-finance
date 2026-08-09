@@ -259,6 +259,27 @@ describe("resolveColumnDates (docs/ledger-spec.md §6.3, §8.8)", () => {
     expect(resolved.precision).toBe("estimated");
   });
 
+  test("rows in one bracket are resolved INDEPENDENTLY, even when that inverts them", () => {
+    // Deliberate, and measured: forcing the output to be non-decreasing looks
+    // like the obvious fix for this inversion, but the real workbook has
+    // `Obi 02.10` / `Obi 30.09` / `Lutz 29.09` in that order (column A rows
+    // 18/20/28 — the September-2021 move-in, typed from memory). A floor
+    // there moves `Obi 30.09` to 2022-09-30 and drags the 18 rows below it a
+    // year forward. The label carries the information; the row order does not.
+    const result = resolveColumnDates(
+      [
+        { row: 1, label: "Anchor 01.09.2021" },
+        { row: 2, label: "Wolle 5.3" },
+        { row: 3, label: "Ikea 20.12" },
+        { row: 4, label: "Anchor 01.01.2023" },
+      ],
+      MOVE_IN,
+      IMPORT_DATE,
+    );
+    expect(toIsoDate(result.get(2)!)).toBe("2022-03-05");
+    expect(toIsoDate(result.get(3)!)).toBe("2021-12-20");
+  });
+
   test("dateStartMsBerlin produces a stable, increasing ms value across dates", () => {
     const a = dateStartMsBerlin({ year: 2025, month: 1, day: 1 });
     const b = dateStartMsBerlin({ year: 2025, month: 6, day: 15 });
@@ -293,6 +314,15 @@ describe("categorize (docs/ledger-spec.md §7.2, §8.10)", () => {
     const result = categorize("Unterlage");
     expect(result.slug).toBe("sonstiges");
     expect(result.matched).toBe(false);
+  });
+
+  test("`gez` is a word, not a substring — the sheet's own \"Schafi gezahlt\" is not a tax", () => {
+    expect(categorize("Schafi gezahlt").slug).not.toBe("steuern_abgaben");
+    expect(categorize("Sofa abgezogen").slug).not.toBe("steuern_abgaben");
+    // …while the real thing still matches, bounded or hyphenated.
+    expect(categorize("GEZ").slug).toBe("steuern_abgaben");
+    expect(categorize("GEZ-Gebühren 2025").slug).toBe("steuern_abgaben");
+    expect(categorize("Steuern 2025").slug).toBe("steuern_abgaben");
   });
 });
 

@@ -124,8 +124,17 @@ export async function findInviteByToken(database: Database, token: string): Prom
  * Validates an invite for redemption.
  * 404 `invite_invalid` — unknown or revoked (or already redeemed by someone else)
  * 409 `invite_expired` — past `expires_at` (the row is flagged `expired`)
+ *
+ * An ACCEPTED invite is spent, and stays redeemable only for the very account
+ * that accepted it — that narrow allowance is what keeps `acceptInvite`
+ * idempotent for a replayed request (docs/spec.md §3.5), and `redeemerId` is
+ * how the caller claims it. Without the check the token would remain a live
+ * capability for the rest of its 14-day TTL: the moment the second person
+ * leaves again (`removeMember` frees the slot), a forwarded or archived link
+ * would seat a completely different, never-invited account. The token IS the
+ * capability, so it has to stop being one when it is used up.
  */
-export async function loadRedeemableInvite(database: Database, token: string): Promise<InviteRow> {
+export async function loadRedeemableInvite(database: Database, token: string, redeemerId?: string): Promise<InviteRow> {
   const invite = await findInviteByToken(database, token);
   if (!invite || invite.status === "revoked") {
     throw new ApiError(404, "invite_invalid", "server.invite.invalid");
@@ -138,6 +147,9 @@ export async function loadRedeemableInvite(database: Database, token: string): P
   }
   if (invite.status === "expired") {
     throw new ApiError(409, "invite_expired", "server.invite.expired");
+  }
+  if (invite.status === "accepted" && (redeemerId === undefined || invite.acceptedBy !== redeemerId)) {
+    throw new ApiError(404, "invite_invalid", "server.invite.invalid");
   }
   return invite;
 }
@@ -170,7 +182,7 @@ export async function acceptInvite(
   userId: string,
   displayName: string,
 ): Promise<AcceptInviteResponse> {
-  const invite = await loadRedeemableInvite(db, token);
+  const invite = await loadRedeemableInvite(db, token, userId);
   const now = nowMs();
 
   const existing = await getMember(db, invite.householdId, userId).catch(() => undefined);

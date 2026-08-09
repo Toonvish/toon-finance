@@ -17,6 +17,19 @@
  *   none), and resolved by, in order: R5 (day.month, year inferred from the
  *   bracket), R6 (German month name, day := 15, year inferred the same way),
  *   R7 (carry `prev` forward, precision "estimated").
+ *
+ * Each row is resolved INDEPENDENTLY inside its bracket, and deliberately so.
+ * It is tempting to also force the output to be non-decreasing — two rows in
+ * one bracket can otherwise come out inverted, an earlier "5.3" taking 2022
+ * (2021-03 is before `lo`) while a later "20.12" fits 2021. That reads like a
+ * bug until you check the workbook: column A rows 18/20/28 are `Obi 02.10`,
+ * `Obi 30.09`, `Lutz 29.09` — the September-2021 move-in shopping, typed in
+ * whatever order it was remembered, descending. "Append-only" holds at the
+ * scale of the sheet, NOT row to row. A monotonic floor was measured against
+ * the real corpus and pushed `Obi 30.09` from 2021-09-30 to 2022-09-30,
+ * cascading a full-year shift onto the 18 rows below it and costing 4 rows
+ * their `day` precision. Ordering within a bracket carries no information
+ * here; the label does. Do not re-add the clamp.
  */
 
 export type DatePrecision = "day" | "month" | "estimated";

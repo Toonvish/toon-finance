@@ -9,6 +9,7 @@ import { householdMembers, transactions, users } from "../../db/schema.ts";
 import { ApiError } from "../../lib/errors.ts";
 import { nowMs } from "../../lib/clock.ts";
 import { toIso } from "../../lib/http.ts";
+import { isUniqueViolation } from "../auth/users.service.ts";
 import type { DbLike } from "../support.ts";
 
 /** Slots currently occupied in a household — at most `{1, 2}`. */
@@ -23,6 +24,13 @@ async function occupiedSlots(db: Database, householdId: string): Promise<Set<1 |
 /**
  * Seats `userId` into the first free slot of `householdId`.
  * Throws 409 `household_full` when both slots are already taken.
+ *
+ * The SELECT above is an optimisation, not the guarantee: two accepts racing
+ * for the same last free seat both read it as free, and only
+ * `household_members_slot_uidx` decides. That is on purpose — the
+ * two-person rule is a DB fact, not a service convention (decision #1) — so
+ * losing the race has to answer `409 household_full` exactly as if the read
+ * had seen the seat taken, never a raw SQLite error escaping as a 500.
  */
 export async function assignSlot(
   db: Database,
@@ -35,13 +43,18 @@ export async function assignSlot(
   if (slot === undefined) throw ApiError.conflict("household_full", "server.household.full");
 
   const timestamp = nowMs();
-  await db.insert(householdMembers).values({
-    householdId,
-    userId,
-    memberSlot: slot,
-    displayName,
-    joinedAt: timestamp,
-  });
+  try {
+    await db.insert(householdMembers).values({
+      householdId,
+      userId,
+      memberSlot: slot,
+      displayName,
+      joinedAt: timestamp,
+    });
+  } catch (error) {
+    if (isUniqueViolation(error)) throw ApiError.conflict("household_full", "server.household.full");
+    throw error;
+  }
   return slot;
 }
 

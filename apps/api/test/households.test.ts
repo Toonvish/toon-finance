@@ -7,8 +7,11 @@
 import { describe, expect, test } from "bun:test";
 import { eq } from "drizzle-orm";
 import { db } from "../src/db/client.ts";
-import { categories, fixedCostPlans, transactions } from "../src/db/schema.ts";
+import { categories, fixedCostPlans, householdMembers, transactions } from "../src/db/schema.ts";
 import { runMigrations } from "../src/db/migrate.ts";
+import { ApiError } from "../src/lib/errors.ts";
+import { isUniqueViolation } from "../src/services/auth/users.service.ts";
+import { assignSlot } from "../src/services/households/members.service.ts";
 import { body, call, createHousehold, createUser } from "./support/harness.ts";
 
 await runMigrations(db);
@@ -131,5 +134,58 @@ describe("DELETE /api/households/:householdId/members/:userId", () => {
 
     const allowed = await call(`/api/households/${householdId}/members/${owner.id}`, { method: "DELETE", cookie: owner.cookie });
     expect(allowed.status).toBe(204);
+  });
+});
+
+describe("the two-person rule is enforced by the DB, not by the read before it", () => {
+  test("two accepts racing for the last free slot: one wins, the other gets 409 household_full", async () => {
+    const owner = await createUser("Owner");
+    const householdId = await createHousehold(owner, "Wettlauf");
+    const first = await createUser("First");
+    const second = await createUser("Second");
+
+    // `assignSlot` reads the occupied slots and THEN inserts; both of these see
+    // slot 2 free, and only `household_members_slot_uidx` separates them.
+    const results = await Promise.allSettled([
+      assignSlot(db, householdId, first.id, "First"),
+      assignSlot(db, householdId, second.id, "Second"),
+    ]);
+    const seated = results.filter((r) => r.status === "fulfilled");
+    const refused = results.filter((r) => r.status === "rejected");
+    expect(seated).toHaveLength(1);
+    expect(refused).toHaveLength(1);
+
+    // The loser must lose the way the contract says — not as a raw SQLite
+    // error escaping the service as a 500.
+    const reason = (refused[0] as PromiseRejectedResult).reason as ApiError;
+    expect(reason).toBeInstanceOf(ApiError);
+    expect(reason.status).toBe(409);
+    expect(reason.code).toBe("household_full");
+
+    const members = await db.select().from(householdMembers).where(eq(householdMembers.householdId, householdId));
+    expect(members).toHaveLength(2);
+  });
+
+  test("isUniqueViolation sees through the wrapper drizzle puts around every query error", async () => {
+    const owner = await createUser("Owner");
+    const householdId = await createHousehold(owner, "Wrapper");
+    let caught: unknown;
+    try {
+      // Slot 1 is already the owner's.
+      await db.insert(householdMembers).values({
+        householdId,
+        userId: owner.id,
+        memberSlot: 1,
+        displayName: "Doppelt",
+        joinedAt: Date.now(),
+      });
+    } catch (error) {
+      caught = error;
+    }
+    // The thrown object is a `DrizzleQueryError` reading "Failed query: insert
+    // into …" — the words "UNIQUE constraint failed" only appear in `.cause`.
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).not.toMatch(/unique constraint/i);
+    expect(isUniqueViolation(caught)).toBe(true);
   });
 });

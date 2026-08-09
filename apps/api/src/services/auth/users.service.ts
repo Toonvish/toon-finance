@@ -87,11 +87,31 @@ export async function updateUser(database: Database, userId: string, patch: Upda
   return row;
 }
 
-/** True for a SQLite UNIQUE constraint failure, whatever the driver wraps it in. */
+const UNIQUE_VIOLATION_RE = /unique constraint|sqlite_constraint_unique|constraint failed: users\.email/i;
+
+/**
+ * True for a SQLite UNIQUE constraint failure, whatever the driver wraps it in
+ * — and it always wraps it in something. Drizzle turns EVERY query failure
+ * into a `DrizzleQueryError` whose own `message` is only `Failed query: insert
+ * into "incomes" …` and whose `code` is `undefined`; the driver's
+ * `LibsqlError` (`SQLITE_CONSTRAINT: UNIQUE constraint failed: …`) sits one
+ * level down in `cause`. Inspecting just the top level therefore answered
+ * `false` for every unique violation this codebase can actually produce, and
+ * each of the four 409s built on this helper degraded into an unhandled 500 —
+ * `POST …/plan/incomes` with a duplicate `validFrom` was a plain
+ * `internal_error` (`email_taken` looked fine only because the register route
+ * pre-checks the address and never reaches its catch). Hence: walk the chain,
+ * depth-capped so a self-referential `cause` cannot spin.
+ */
 export function isUniqueViolation(error: unknown): boolean {
-  const message =
-    error instanceof Error
-      ? `${error.message} ${String((error as { code?: unknown }).code ?? "")}`
-      : String(error);
-  return /unique constraint|sqlite_constraint_unique|constraint failed: users\.email/i.test(message);
+  let current: unknown = error;
+  for (let depth = 0; current !== null && current !== undefined && depth < 5; depth++) {
+    const text =
+      current instanceof Error
+        ? `${current.message} ${String((current as { code?: unknown }).code ?? "")}`
+        : String(current);
+    if (UNIQUE_VIOLATION_RE.test(text)) return true;
+    current = current instanceof Error ? current.cause : undefined;
+  }
+  return false;
 }

@@ -40,7 +40,13 @@ const ORDERED_RULES: CategoryRule[] = [
   { slug: "miete", pattern: /\bmiete|mietkaution|kaution/i },
   { slug: "nebenkosten", pattern: /strom|nachzahlung|r(ü|ue)ckerstattung|internet|gas|wasser|abschlag/i },
   { slug: "versicherung", pattern: /haftpflicht|versicherung/i },
-  { slug: "steuern_abgaben", pattern: /steuern|gez|rundfunk/i },
+  // `\bgez\b`, not the spec table's bare `gez`: as a substring it fires on
+  // any "…gez…" word, and the sheet's own D-column header is literally
+  // "Schafi gezahlt" — the trap is in the corpus vocabulary, one typed label
+  // away from filing a partner's repayment under taxes. Bounded, it still
+  // matches "GEZ" and "GEZ-Gebühren"; on the real corpus it changes nothing
+  // (the single steuern_abgaben row is "Steuern 2025", via `steuern`).
+  { slug: "steuern_abgaben", pattern: /steuern|\bgez\b|rundfunk/i },
   {
     slug: "baumarkt",
     pattern: /\bobi\b|farbe|maler|hammer|fliegengitter|tischbeine|kohle ?filter|bauhaus|hornbach|schrauben/i,
