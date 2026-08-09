@@ -427,6 +427,21 @@ Die ersten sechzehn sind aus `toon-recipe` übernommen (dort teuer gelernt, hier
     `fixed_cost_items`/`incomes`, `startPeriod` nie über den Default hinaus bewegt), obwohl die Zahlen
     die ganze Zeit im Blatt standen. `parseFixedCostFormulaCents` spaltet die Formel selbst, nicht den
     Cache.
+49. **`PUBLIC_API_URL` MUSS leer sein — auch in der Entwicklung —, und ein absoluter Wert dort täuscht
+    einen Serverausfall vor.** Die App hat GENAU EINE Origin: im Container serviert die API die
+    gebaute PWA (`WEB_DIST_DIR`), in der Entwicklung leitet Vites `server.proxy` `/api` an den
+    API-Port weiter. Genau deshalb montiert `apps/api/src/index.ts` **kein `cors()`** (Entscheidung
+    #7). Steht in `PUBLIC_API_URL` eine absolute URL, baut `lib/api.ts` absolute Requests, die am
+    Proxy vorbei direkt auf `:3001` gehen — cross-origin, gegen einen Server ohne CORS-Header. Das
+    Symptom lügt: der Server antwortet sauber mit 200/401, der Network-Tab zeigt den Body, aber der
+    Browser gibt ihn nicht an JS weiter, `fetch` rejected, und die App rendert
+    `common.errorOffline` („Keine Verbindung zum Server.") über einer völlig gesunden API. Genau so
+    war `.env.example` ausgeliefert (`PUBLIC_API_URL="http://localhost:3001"`, während der Kommentar
+    zwei Zeilen darüber „LEAVE THIS EMPTY" sagte), und damit war **jedes frische Setup beim ersten
+    Öffnen kaputt** — kein Test schlug an, weil `bun test` nie durch einen Browser geht. Der Default
+    ist jetzt `""`, ein Test in `apps/api/test/smoke.test.ts` pinnt das, und `lib/api.ts` schreibt im
+    Dev-Modus eine erklärende `console.error`, falls die Origins auseinanderlaufen. Wer die API
+    wirklich auf eine andere Origin legt, muss `cors()` mitliefern — beides hängt zusammen.
 
 ## Verifikations-Gates
 

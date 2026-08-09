@@ -123,3 +123,27 @@ describe("schema + migrations", () => {
     expect(await db.select().from(sessions)).toHaveLength(1);
   });
 });
+
+/**
+ * CLAUDE.md gotcha #49. The app is single-origin by construction: the container
+ * serves the PWA from the API (`WEB_DIST_DIR`), dev goes through Vite's `/api`
+ * proxy, and `src/index.ts` therefore mounts no `cors()`. An absolute
+ * `PUBLIC_API_URL` bypasses the proxy, makes every browser request cross-origin
+ * against a server with no CORS headers, and the app renders "Keine Verbindung
+ * zum Server." over a healthy API. `.env.example` shipped exactly that value and
+ * broke every fresh setup on first open; nothing caught it because `bun test`
+ * never goes through a browser. This is the cheap guard for the template — the
+ * developer's own `.env` is theirs, but the template must not hand them a
+ * broken default.
+ */
+describe("single-origin config", () => {
+  test('.env.example ships PUBLIC_API_URL empty, because the API mounts no cors()', async () => {
+    const template = await Bun.file(new URL("../../../.env.example", import.meta.url)).text();
+    const line = template.split("\n").find((l) => /^\s*PUBLIC_API_URL\s*=/.test(l));
+    expect(line).toBeDefined();
+    expect(line!.replace(/^\s*PUBLIC_API_URL\s*=\s*/, "").trim().replace(/^["']|["']$/g, "")).toBe("");
+
+    const indexSource = await Bun.file(new URL("../src/index.ts", import.meta.url)).text();
+    expect(indexSource).not.toMatch(/^\s*app\.use\([^)]*cors\(/m);
+  });
+});

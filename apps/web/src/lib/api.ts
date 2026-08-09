@@ -90,6 +90,28 @@ export const API_BASE_URL: string = (buildEnv.PUBLIC_API_URL ?? buildEnv.VITE_AP
   "",
 );
 
+/**
+ * A cross-origin `API_BASE_URL` is almost always a misconfiguration, and its
+ * symptom is a lie: the API answers 200/401 and the network tab shows the body,
+ * but with no `cors()` on the server (decision #7 — the API mounts none) the
+ * browser refuses to hand it to JS, `fetch` rejects, and the app renders
+ * `common.errorOffline` ("Keine Verbindung zum Server.") over a server that is
+ * perfectly healthy. Shipping `PUBLIC_API_URL="http://localhost:3001"` in
+ * `.env.example` broke every fresh dev setup exactly this way — the fix is an
+ * EMPTY value, so relative URLs hit Vite's `/api` proxy and the origin is one.
+ * Dev-only: `import.meta.env.DEV` is statically false in the bundle, so this
+ * whole block is dropped from production.
+ */
+if (import.meta.env.DEV && API_BASE_URL && typeof window !== "undefined") {
+  if (new URL(API_BASE_URL, window.location.href).origin !== window.location.origin) {
+    console.error(
+      `[api] PUBLIC_API_URL is "${API_BASE_URL}", a different origin than ${window.location.origin}. ` +
+        "The dev server proxies /api already, and the API sends no CORS headers, so every request " +
+        'will fail as "Keine Verbindung zum Server.". Set PUBLIC_API_URL="" in the root .env and restart vite.',
+    );
+  }
+}
+
 /** Absolute-or-relative URL for an API path. */
 export function apiUrl(path: string): string {
   return `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
