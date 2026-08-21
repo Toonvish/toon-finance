@@ -6,7 +6,7 @@
  */
 import type { CategoryResponse, Locale, ServerKey } from "@toon/shared";
 import { serverText } from "@toon/shared";
-import { and, asc, count, eq } from "drizzle-orm";
+import { and, asc, count, eq, inArray } from "drizzle-orm";
 import { type CategoryRow, categories, transactions } from "../../db/schema.ts";
 import { ApiError } from "../../lib/errors.ts";
 import { nowMs } from "../../lib/clock.ts";
@@ -206,4 +206,18 @@ export async function categorySlugOf(db: DbLike, categoryId: string | null): Pro
   if (!categoryId) return null;
   const rows = await db.select({ slug: categories.slug }).from(categories).where(eq(categories.id, categoryId)).limit(1);
   return rows[0]?.slug ?? null;
+}
+
+/**
+ * {@link categorySlugOf} for a whole page of transactions in ONE query.
+ * `listTransactions` serves up to `limit=200` rows and every row needs its
+ * slug, so resolving them one at a time is 200 extra round trips on the most
+ * frequently refetched endpoint in the app.
+ */
+export async function categorySlugsByIds(db: DbLike, categoryIds: readonly string[]): Promise<Map<string, string>> {
+  const slugs = new Map<string, string>();
+  if (categoryIds.length === 0) return slugs; // `inArray` with an empty list is not valid SQL
+  const rows = await db.select({ id: categories.id, slug: categories.slug }).from(categories).where(inArray(categories.id, [...categoryIds]));
+  for (const row of rows) slugs.set(row.id, row.slug);
+  return slugs;
 }

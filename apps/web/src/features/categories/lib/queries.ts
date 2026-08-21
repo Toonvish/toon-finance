@@ -37,6 +37,12 @@ export function useDeleteCategory(householdId: string) {
       void invalidate.categories(queryClient, householdId);
       // A reassign moves transactions to another category — its counts change too.
       void invalidate.transactions(queryClient, householdId);
+      // …and so does the dashboard's per-category breakdown. It sits on its own
+      // key segment (`"transaction-summary"`), so `invalidate.transactions` does
+      // NOT reach it — prefix matching is per array element (see `invalidate`
+      // in lib/queries.ts). Without this the SpendByCategoryCard keeps serving
+      // the pre-reassignment split until its staleTime runs out.
+      void invalidate.transactionSummary(queryClient, householdId);
     },
   });
 }

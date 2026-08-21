@@ -63,6 +63,72 @@ describe("POST /api/households/:householdId/invites", () => {
     expect(blocked.status).toBe(409);
     expect((await body<ErrorPayload>(blocked)).error.code).toBe("household_full");
   });
+
+  test("the mail outcome survives into GET /invites instead of reading back as not_configured", async () => {
+    // Review finding: `listInvites` hardcoded "not_configured" for every row.
+    // The invite card renders its status line from the LIST (the create
+    // mutation invalidates it immediately), so a household with a working SMTP
+    // transport was told its invite mail had never gone out — exactly the
+    // "never render not_configured/failed as success" rule of docs/spec.md
+    // §3.5, inverted.
+    const sends: string[] = [];
+    setMailer({
+      name: "smtp",
+      send: async (message) => {
+        sends.push(message.to);
+      },
+    });
+    try {
+      const owner = await createUser("Owner");
+      const householdId = await createHousehold(owner, "Zustellung");
+
+      const created = await body<InviteResponse>(
+        await call(`/api/households/${householdId}/invites`, {
+          method: "POST",
+          cookie: owner.cookie,
+          body: { email: "partner@example.org" },
+        }),
+      );
+      expect(sends).toEqual(["partner@example.org"]);
+      expect(created.mailDelivery).toBe("sent");
+
+      const listed = await body<{ items: InviteResponse[] }>(
+        await call(`/api/households/${householdId}/invites`, { cookie: owner.cookie }),
+      );
+      expect(listed.items.find((item) => item.id === created.id)?.mailDelivery).toBe("sent");
+    } finally {
+      setMailer(null);
+    }
+  });
+
+  test("a refusing transport reads back as failed, not as not_configured", async () => {
+    setMailer({
+      name: "smtp",
+      send: async () => {
+        throw new Error("connection refused");
+      },
+    });
+    try {
+      const owner = await createUser("Owner");
+      const householdId = await createHousehold(owner, "Fehlschlag");
+
+      const created = await body<InviteResponse>(
+        await call(`/api/households/${householdId}/invites`, {
+          method: "POST",
+          cookie: owner.cookie,
+          body: { email: "partner@example.org" },
+        }),
+      );
+      expect(created.mailDelivery).toBe("failed");
+
+      const listed = await body<{ items: InviteResponse[] }>(
+        await call(`/api/households/${householdId}/invites`, { cookie: owner.cookie }),
+      );
+      expect(listed.items.find((item) => item.id === created.id)?.mailDelivery).toBe("failed");
+    } finally {
+      setMailer(null);
+    }
+  });
 });
 
 describe("GET /api/households/invites/:token", () => {

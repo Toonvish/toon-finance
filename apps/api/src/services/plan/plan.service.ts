@@ -78,6 +78,16 @@ async function listIncomeRows(db: DbLike, householdId: string): Promise<IncomeRo
 }
 
 /**
+ * The two temporal tables every computation needs, concurrently — they have no
+ * data dependency on each other, and every plan read wants both. One helper so
+ * the pair cannot drift apart between the callers that load it.
+ */
+async function listPlanInputRows(db: DbLike, householdId: string): Promise<{ items: FixedCostItemRow[]; incomeRows: IncomeRow[] }> {
+  const [items, incomeRows] = await Promise.all([listItemRows(db, householdId), listIncomeRows(db, householdId)]);
+  return { items, incomeRows };
+}
+
+/**
  * Whether ANY row already occupies this period — regardless of `origin`.
  * Deliberately NOT filtered to `origin = 'fixed_plan'`: an imported rent-series
  * row (`origin = 'import'`, `planPeriod` set by scripts/import/rent.ts) covers
@@ -131,8 +141,7 @@ async function lastRunOf(db: Database, householdId: string): Promise<AccrualRunR
 /** `GET …/plan`: everything the plan screen needs in one call. */
 export async function getPlanResponse(db: Database, householdId: string): Promise<PlanResponse> {
   const plan = await loadPlanRow(db, householdId);
-  const items = await listItemRows(db, householdId);
-  const incomeRows = await listIncomeRows(db, householdId);
+  const { items, incomeRows } = await listPlanInputRows(db, householdId);
   const nowPeriod = currentPeriod(nowMs());
 
   const current = await computeCurrent(db, householdId, plan, items, incomeRows, nowPeriod);
@@ -198,8 +207,7 @@ export async function previewPlan(db: Database, householdId: string, period: str
     throw new ApiError(422, "plan_period_out_of_range", "server.plan.periodOutOfRange");
   }
 
-  const items = await listItemRows(db, householdId);
-  const incomeRows = await listIncomeRows(db, householdId);
+  const { items, incomeRows } = await listPlanInputRows(db, householdId);
   const result = await computeCurrent(db, householdId, plan, items, incomeRows, period);
   if (!result) throw ApiError.conflict("plan_incomplete", "server.plan.incomplete");
   return result;
@@ -342,4 +350,4 @@ export async function listAccrualRuns(
   return { items: rows.map(toAccrualRunResponse), total: totalRows.length };
 }
 
-export { listItemRows, listIncomeRows };
+export { listItemRows, listIncomeRows, listPlanInputRows };

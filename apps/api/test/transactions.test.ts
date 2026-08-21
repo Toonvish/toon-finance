@@ -139,6 +139,38 @@ describe("POST /api/households/:householdId/transactions — the four kinds", ()
     // (review finding: `transaction_amount_zero` was declared but unreachable).
     expect((await body<{ error: { code: string } }>(zero)).error.code).toBe("transaction_amount_zero");
   });
+
+  test("?kind=THEIRS_SPLIT/TRANSFER match nothing while the household has only one member", async () => {
+    // Review finding: the filter used to resolve its `otherId` as
+    // `otherMemberId(...) ?? viewerId`, so with the second seat still an open
+    // invite `THEIRS_SPLIT` compiled to `payer = viewer AND SPLIT_EQUAL` — the
+    // MINE_SPLIT filter — and answered "what did the other person pay?" with
+    // the viewer's OWN rows. The filter now reads the way `projectKind` does:
+    // the payer is not the viewer.
+    const solo = await createUser("Solo");
+    const householdId = await createHousehold(solo, "Allein");
+
+    const mine = await body<TransactionResponse>(
+      await call(`/api/households/${householdId}/transactions`, {
+        method: "POST",
+        cookie: solo.cookie,
+        body: { kind: "MINE_SPLIT", amountCents: 2_000, description: "Eigene Ausgabe" },
+      }),
+    );
+
+    const mineFilter = await body<TransactionListResponse>(
+      await call(`/api/households/${householdId}/transactions?kind=MINE_SPLIT`, { cookie: solo.cookie }),
+    );
+    expect(mineFilter.items.map((t) => t.id)).toEqual([mine.id]);
+
+    for (const kind of ["THEIRS_SPLIT", "TRANSFER"] as const) {
+      const list = await body<TransactionListResponse>(
+        await call(`/api/households/${householdId}/transactions?kind=${kind}`, { cookie: solo.cookie }),
+      );
+      expect(list.items).toEqual([]);
+      expect(list.total).toBe(0);
+    }
+  });
 });
 
 describe("idempotency of POST", () => {

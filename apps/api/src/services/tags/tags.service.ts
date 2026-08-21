@@ -123,6 +123,32 @@ export async function tagRefsOf(db: DbLike, transactionId: string): Promise<{ id
 }
 
 /**
+ * {@link tagRefsOf} for a whole page of transactions in ONE query, keyed by
+ * transaction id. The single `ORDER BY tags.name` carries over per group, so
+ * each list comes out in the same order {@link tagRefsOf} would produce.
+ * Transactions without tags are simply absent from the map.
+ */
+export async function tagRefsByTransactionIds(
+  db: DbLike,
+  transactionIds: readonly string[],
+): Promise<Map<string, { id: string; name: string }[]>> {
+  const byTransaction = new Map<string, { id: string; name: string }[]>();
+  if (transactionIds.length === 0) return byTransaction; // `inArray` with an empty list is not valid SQL
+  const rows = await db
+    .select({ transactionId: transactionTags.transactionId, id: tags.id, name: tags.name })
+    .from(transactionTags)
+    .innerJoin(tags, eq(tags.id, transactionTags.tagId))
+    .where(inArray(transactionTags.transactionId, [...transactionIds]))
+    .orderBy(asc(tags.name));
+  for (const row of rows) {
+    const refs = byTransaction.get(row.transactionId);
+    if (refs) refs.push({ id: row.id, name: row.name });
+    else byTransaction.set(row.transactionId, [{ id: row.id, name: row.name }]);
+  }
+  return byTransaction;
+}
+
+/**
  * `GET …/tags`: without `q`, the most-used tags (the suggestion list in the
  * create flow); with `q`, a prefix match on the normalized key.
  */

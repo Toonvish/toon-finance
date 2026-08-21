@@ -261,6 +261,10 @@ export const invites = sqliteTable(
     createdAt: integer("created_at").notNull().$defaultFn(now),
     acceptedAt: integer("accepted_at"),
     acceptedBy: text("accepted_by").references(() => users.id, { onDelete: "set null" }),
+    // Ergebnis des EINEN Sendeversuchs, festgehalten für GET /invites (§3.5)
+    mailDelivery: text("mail_delivery", { enum: ["sent", "not_configured", "failed"] })
+      .notNull()
+      .default("not_configured"),
   },
   (t) => [
     uniqueIndex("invites_token_uidx").on(t.token),
@@ -891,7 +895,11 @@ Anmerkungen
   **nicht** erzwungen, damit ein Link weitergeleitet werden kann.
 * Token: 32 Byte URL-safe, 14 Tage TTL, `inviteUrl = ${WEB_ORIGIN}/invite/<token>`.
 * `mailDelivery` hat drei Zustände, und die UI darf `not_configured` / `failed` **nie** als Erfolg
-  rendern. Die Einladung ist in allen drei Fällen gültig — `inviteUrl` ist die Wahrheit —, aber ein
+  rendern. Der Wert wird beim Anlegen in `invites.mail_delivery` **festgeschrieben** (§2.5) — der
+  Versand passiert genau einmal, nach dem Commit, und die Karte liest ihren Status aus der **Liste**
+  (die Create-Mutation invalidiert sie sofort). Eine Liste, die den Wert stattdessen fest mit
+  `not_configured` beantwortet, erzählt einem Haushalt mit funktionierendem SMTP, seine Mail sei nie
+  rausgegangen — dieselbe Regel, nur in der anderen Richtung verletzt. Die Einladung ist in allen drei Fällen gültig — `inviteUrl` ist die Wahrheit —, aber ein
   konfigurierter Transport, der die Mail verweigert, ist ein kaputtes Deployment, keine Selfhost-Wahl
   ohne Mailserver. Der Versand passiert **nach** dem Commit und lässt die Aktion nie scheitern.
 * `DELETE /members/:userId` ist der Austritt. Er ist nur für einen selbst erlaubt (bei zwei Personen ist
@@ -1558,6 +1566,10 @@ packages/shared/tsconfig.json   [GERÜST]    types ["bun"], include src/**, test
 ```
 
 ### 5.3 `apps/api/src`
+
+Pfade sind relativ zu `apps/api/`, nicht zu `apps/api/src/`: `drizzle.config.ts` und der ganze
+`scripts/`-Block unten liegen NEBEN `src/`, nicht darin (ebenso `test/`, §5.4 — das tsconfig
+inkludiert `src/**`, `scripts/**` und `test/**` getrennt).
 
 ```
 index.ts                        [API-KERN]  Hono-Bootstrap; Reihenfolge ist der Inhalt (§5.3.1)

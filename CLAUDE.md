@@ -104,11 +104,13 @@ apps/api/src/
   middleware/staticWeb.ts  serviert apps/web/dist, mountet LETZTER, besitzt den SPA-Fallback
   routes/{auth,households,transactions,categories,tags,plan,balance,settlements}.ts
   services/{auth,households,ledger,categories,tags,plan,mail}/
-  scripts/{migrate,seed,reset-password,plan-run,import-xlsx}.ts
-  scripts/import/{xlsx-reader,amounts,dates,categorize,rent}.ts   [NICHT unter
+apps/api/scripts/          NEBEN src/, nicht darin — das tsconfig inkludiert beide getrennt
+  {migrate,seed,reset-password,plan-run,import-xlsx}.ts
+  import/{xlsx-reader,amounts,dates,categorize,rent}.ts           [NICHT unter
                            packages/shared/src/import/, obwohl das ursprünglich so geplant war —
                            docs/spec.md §8.2 #16]
-  test/                    ALLE API-Tests (test/, NICHT tests/ — das tsconfig inkludiert nur test/**)
+apps/api/test/             ALLE API-Tests, ebenfalls NEBEN src/ (test/, NICHT tests/ — das tsconfig
+                           inkludiert nur test/**)
 apps/web/src/
   router.tsx               der Route-Baum; Screens lazy über lib/lazy-page.tsx
   lib/{api,queries,query-client,session,persist,pwa,unsavedWork,storage,theme,format,validation,

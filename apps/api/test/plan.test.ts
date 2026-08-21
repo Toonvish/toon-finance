@@ -525,6 +525,66 @@ describe("recalculate — booked periods are never edited", () => {
     expect(balance.balanceCents).toBe(47_086 + totalAdjustmentCents);
   });
 
+  test("swapping the plan payer leaves already-booked periods alone", async () => {
+    // Review finding: `recalculatePlan` recomputed every historical period with
+    // the CURRENT `fixedCostPlans.payerId`. That column is mutable and carries
+    // no history, so the moment a household decided the other person takes over
+    // the fixed costs, the two incomes swapped places in `share(other) =
+    // income × costTotal / incomeTotal` and every already-booked month reported
+    // a delta that corresponded to no change in the data at all.
+    setClockForTest(JAN);
+    const owner = await createUser("Owner");
+    const partner = await createUser("Partner");
+    const householdId = await createHousehold(owner, "Zahlerwechsel");
+    await joinAsSecondMember(owner, householdId, partner);
+    await seedFullPlan(owner, partner, householdId); // payer = owner, booked 2026-01 at 47 086
+    await call(`/api/households/${householdId}/plan/run`, { method: "POST", cookie: owner.cookie, body: {} });
+
+    const swap = await call(`/api/households/${householdId}/plan`, {
+      method: "PATCH",
+      cookie: owner.cookie,
+      body: { payerId: partner.id },
+    });
+    expect(swap.status).toBe(200);
+
+    // Nothing about January's data changed, so there is nothing to correct.
+    const preview = await body<RecalculatePlanResponse>(
+      await call(`/api/households/${householdId}/plan/recalculate`, { method: "POST", cookie: owner.cookie, body: { dryRun: true } }),
+    );
+    expect(preview.items).toEqual([]);
+    expect(preview.totalDeltaCents).toBe(0);
+
+    const applied = await body<RecalculatePlanResponse>(
+      await call(`/api/households/${householdId}/plan/recalculate`, { method: "POST", cookie: owner.cookie, body: { dryRun: false } }),
+    );
+    expect(applied.adjustments).toEqual([]);
+    const adjustmentRows = await db
+      .select()
+      .from(transactions)
+      .where(and(eq(transactions.householdId, householdId), eq(transactions.origin, "fixed_plan_adjustment")));
+    expect(adjustmentRows).toHaveLength(0);
+
+    // A REAL retroactive change is still corrected — and attributed to the
+    // payer January was booked under, not to whoever pays now.
+    const plan = await body<PlanResponse>(await call(`/api/households/${householdId}/plan`, { cookie: owner.cookie }));
+    const partnerIncome = plan.incomes.find((i) => i.personId === partner.id)!;
+    await call(`/api/households/${householdId}/plan/incomes/${partnerIncome.id}`, {
+      method: "PATCH",
+      cookie: owner.cookie,
+      body: { amountCents: 250_000 },
+    });
+    const correction = await body<RecalculatePlanResponse>(
+      await call(`/api/households/${householdId}/plan/recalculate`, { method: "POST", cookie: owner.cookie, body: { dryRun: false } }),
+    );
+    expect(correction.adjustments).toHaveLength(1);
+    const correctionRows = await db
+      .select()
+      .from(transactions)
+      .where(and(eq(transactions.householdId, householdId), eq(transactions.origin, "fixed_plan_adjustment")));
+    expect(correctionRows).toHaveLength(1);
+    expect(correctionRows[0]?.payerId).toBe(owner.id);
+  });
+
   test("a period whose share rounded to ZERO is still correctable afterwards", async () => {
     setClockForTest(JAN);
     const owner = await createUser("Owner");

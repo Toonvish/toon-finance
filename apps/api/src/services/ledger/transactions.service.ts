@@ -22,7 +22,7 @@ import {
   isExpense as isExpenseTx,
   kindToStorage,
 } from "@toon/shared";
-import { and, asc, desc, eq, gte, inArray, lte, notInArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte, ne, notInArray, sql, type SQL } from "drizzle-orm";
 import type { Database } from "../../db/client.ts";
 import { categories, transactionTags, transactions, type TransactionRow } from "../../db/schema.ts";
 import { ApiError } from "../../lib/errors.ts";
@@ -30,8 +30,8 @@ import { nowMs } from "../../lib/clock.ts";
 import { toIso } from "../../lib/http.ts";
 import { otherMemberId, requireOtherMemberId, slot1UserId } from "../households/members.service.ts";
 import { withTransaction, type DbLike } from "../support.ts";
-import { categorySlugOf } from "../categories/categories.service.ts";
-import { clearTransactionTags, syncTransactionTags, tagRefsOf } from "../tags/tags.service.ts";
+import { categorySlugOf, categorySlugsByIds } from "../categories/categories.service.ts";
+import { clearTransactionTags, syncTransactionTags, tagRefsByTransactionIds, tagRefsOf } from "../tags/tags.service.ts";
 import { sammelbuchungTransactionIds } from "./aggregateExclusion.ts";
 import { computeBalanceDelta } from "./balance.service.ts";
 import { parseRangeBound } from "./dateRange.ts";
@@ -42,8 +42,13 @@ function otherShareOf(splitMode: SplitModeValue, amountCents: number): number {
   return splitMode === "SPLIT_EQUAL" ? halfForOther(amountCents) : amountCents;
 }
 
-async function toResponse(db: DbLike, row: TransactionRow, person1Id: string): Promise<TransactionResponse> {
-  const [categorySlug, tagRefs] = await Promise.all([categorySlugOf(db, row.categoryId), tagRefsOf(db, row.id)]);
+/** The pure row → response projection, once the two joined reads are resolved. */
+function buildResponse(
+  row: TransactionRow,
+  person1Id: string,
+  categorySlug: string | null,
+  tagRefs: { id: string; name: string }[],
+): TransactionResponse {
   const otherShareCents = otherShareOf(row.splitMode, row.amountCents);
   return {
     id: row.id,
@@ -67,6 +72,28 @@ async function toResponse(db: DbLike, row: TransactionRow, person1Id: string): P
     balanceDeltaCents: computeBalanceDelta(row, person1Id),
     isExpense: isExpenseTx(row),
   };
+}
+
+async function toResponse(db: DbLike, row: TransactionRow, person1Id: string): Promise<TransactionResponse> {
+  const [categorySlug, tagRefs] = await Promise.all([categorySlugOf(db, row.categoryId), tagRefsOf(db, row.id)]);
+  return buildResponse(row, person1Id, categorySlug, tagRefs);
+}
+
+/**
+ * {@link toResponse} for a whole page: the categories and tags of EVERY row in
+ * two queries instead of two per row. At the contract's `limit=200` the
+ * per-row version costs up to 400 extra round trips, on the endpoint the list
+ * screen and every offline-first refetch hit hardest.
+ */
+async function toResponsePage(db: DbLike, rows: readonly TransactionRow[], person1Id: string): Promise<TransactionResponse[]> {
+  const categoryIds = [...new Set(rows.map((row) => row.categoryId).filter((id): id is string => id !== null))];
+  const [categorySlugs, tagRefs] = await Promise.all([
+    categorySlugsByIds(db, categoryIds),
+    tagRefsByTransactionIds(db, rows.map((row) => row.id)),
+  ]);
+  return rows.map((row) =>
+    buildResponse(row, person1Id, row.categoryId === null ? null : (categorySlugs.get(row.categoryId) ?? null), tagRefs.get(row.id) ?? []),
+  );
 }
 
 async function loadRowOr404(db: DbLike, householdId: string, transactionId: string): Promise<TransactionRow> {
@@ -282,8 +309,30 @@ async function transactionIdsWithAllTags(db: Database, tagIds: readonly string[]
   return rows.map((row) => row.transactionId);
 }
 
-function resolveKindFilter(kind: TxKindValue, viewerId: string, otherId: string): { payerId: string; splitMode: SplitModeValue } {
-  return kindToStorage(kind, viewerId, otherId);
+/**
+ * The `kind` query filter, expressed the way `projectKind` READS a row back
+ * (`packages/shared/src/ledger.ts`): the two "theirs" kinds mean `payer_id IS
+ * NOT the viewer`, not `payer_id = the other member's id`.
+ *
+ * Going through `kindToStorage(kind, viewerId, otherId)` instead needs an
+ * `otherId`, and the only way to get one for a read is `otherMemberId(...) ??
+ * viewerId` — the fallback every single-member household hits while the second
+ * invite is still open. With `otherId === viewerId`, `THEIRS_SPLIT` compiles to
+ * `payer = viewer AND SPLIT_EQUAL`, which is EXACTLY the `MINE_SPLIT` filter:
+ * "show me what the other person paid" answered with the viewer's own rows
+ * instead of an empty page. `TRANSFER` degrades the same way onto the reverse
+ * settlement direction, which `projectKind` deliberately does not name.
+ *
+ * `!= viewer` needs no member lookup, cannot be spoofed by a missing second
+ * member, and stays correct for any row whose payer is not a current member.
+ */
+function kindFilterConditions(kind: TxKindValue, viewerId: string): SQL[] {
+  const splitMode: SplitModeValue = kind === "FOR_THEM" ? "OTHER_ONLY" : kind === "TRANSFER" ? "SETTLEMENT" : "SPLIT_EQUAL";
+  const payerIsViewer = kind === "MINE_SPLIT" || kind === "FOR_THEM";
+  return [
+    payerIsViewer ? eq(transactions.payerId, viewerId) : ne(transactions.payerId, viewerId),
+    eq(transactions.splitMode, splitMode),
+  ];
 }
 
 export async function listTransactions(
@@ -305,11 +354,7 @@ export async function listTransactions(
     conditions.push(sql`lower(${transactions.description}) like ${`%${filters.q.trim().toLowerCase()}%`}`);
   }
 
-  if (filters.kind) {
-    const otherId = (await otherMemberId(db, householdId, viewerId)) ?? viewerId;
-    const { payerId, splitMode } = resolveKindFilter(filters.kind, viewerId, otherId);
-    conditions.push(eq(transactions.payerId, payerId), eq(transactions.splitMode, splitMode));
-  }
+  if (filters.kind) conditions.push(...kindFilterConditions(filters.kind, viewerId));
 
   if (filters.tagIds) {
     const ids = filters.tagIds.split(",").map((id) => id.trim()).filter((id) => id.length > 0);
@@ -345,7 +390,7 @@ export async function listTransactions(
     .limit(filters.limit)
     .offset(filters.offset);
 
-  const items = await Promise.all(rows.map((row) => toResponse(db, row, person1Id)));
+  const items = await toResponsePage(db, rows, person1Id);
   return { items, total: Number(total), limit: filters.limit, offset: filters.offset };
 }
 

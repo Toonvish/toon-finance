@@ -20,7 +20,7 @@ import { withTransaction } from "../support.ts";
 import { toTransactionResponse } from "../ledger/transactions.service.ts";
 import { syncTransactionTags } from "../tags/tags.service.ts";
 import { catchUpRange, isPlanComputable, periodAsMonthSlashYear } from "./period-scan.ts";
-import { isPeriodBooked, listIncomeRows, listItemRows, loadPlanRow, toAccrualRunResponse } from "./plan.service.ts";
+import { isPeriodBooked, listPlanInputRows, loadPlanRow, toAccrualRunResponse } from "./plan.service.ts";
 
 /** The fixed-cost plan books into this category (docs/spec.md §2.6, §3.7). */
 const PLAN_CATEGORY_SLUG = "fixkosten";
@@ -112,8 +112,7 @@ export async function runCatchUp(db: Database, householdId: string, options: Run
         return { bookedPeriods: [], skippedPeriods: candidatePeriods, bookedCents: 0, allIncomplete: candidatePeriods.length > 0 };
       }
 
-      const items = await listItemRows(tx, householdId);
-      const incomeRows = await listIncomeRows(tx, householdId);
+      const { items, incomeRows } = await listPlanInputRows(tx, householdId);
       const household = await loadHouseholdRow(tx, householdId);
       const categoryId = await categoryIdBySlug(tx, householdId, PLAN_CATEGORY_SLUG);
 
@@ -280,14 +279,22 @@ interface RecalculationLine {
  * lastBookedPeriod]` — every period a run has already walked past — is
  * therefore part of the candidate set, and a period with no plan row simply
  * diffs against 0.
+ *
+ * Each period is recomputed for the payer THAT PERIOD was booked under, read
+ * off its own row (`payerByPeriod`), never `plan.payerId`. That column is
+ * mutable via `PATCH …/plan { payerId }` and carries no history, so using it
+ * for a historical month would recompute January under whoever pays today: the
+ * two incomes swap places in `share(other) = income × costTotal / incomeTotal`,
+ * every already-booked period reports a delta that corresponds to no change in
+ * the data, and the household gets a full set of adjustments the moment it
+ * decides the other person takes over the fixed costs. Periods with no plan row
+ * (a share of exactly 0) have no payer of record and fall back to the plan's.
  */
 export async function recalculatePlan(db: Database, householdId: string, viewerId: string, dryRun: boolean): Promise<RecalculatePlanResponse> {
   const plan = await loadPlanRow(db, householdId);
   if (!plan.enabled) throw ApiError.conflict("plan_disabled", "server.plan.disabled");
 
-  const otherId = await otherMemberId(db, householdId, plan.payerId);
-  const items = await listItemRows(db, householdId);
-  const incomeRows = await listIncomeRows(db, householdId);
+  const { items, incomeRows } = await listPlanInputRows(db, householdId);
 
   // Every row claiming a plan period, in ONE query, partitioned by origin:
   // `fixed_plan` + `fixed_plan_adjustment` together are the EFFECTIVE booked
@@ -295,23 +302,43 @@ export async function recalculatePlan(db: Database, householdId: string, viewerI
   // row carrying a planPeriod) means the plan deliberately never booked that
   // month — `runCatchUp`'s `isPeriodBooked` skip — and must not start now.
   const periodRows = await db
-    .select({ planPeriod: transactions.planPeriod, origin: transactions.origin, amountCents: transactions.amountCents })
+    .select({
+      planPeriod: transactions.planPeriod,
+      origin: transactions.origin,
+      amountCents: transactions.amountCents,
+      payerId: transactions.payerId,
+    })
     .from(transactions)
     .where(and(eq(transactions.householdId, householdId), isNotNull(transactions.planPeriod)));
 
   const bookedByPeriod = new Map<string, number>();
   const adjustmentSumByPeriod = new Map<string, number>();
   const foreignPeriods = new Set<string>();
+  // The payer OF RECORD per period, read off the row the plan actually wrote.
+  // `plan.payerId` is the payer of TODAY, not of that month.
+  const payerByPeriod = new Map<string, string>();
   for (const row of periodRows) {
     const period = row.planPeriod;
     if (!period) continue;
     if (row.origin === "fixed_plan") {
       bookedByPeriod.set(period, (bookedByPeriod.get(period) ?? 0) + row.amountCents);
+      payerByPeriod.set(period, row.payerId);
     } else if (row.origin === "fixed_plan_adjustment") {
       adjustmentSumByPeriod.set(period, (adjustmentSumByPeriod.get(period) ?? 0) + row.amountCents);
+      // Only as a fallback: a period whose share came out 0 has no `fixed_plan`
+      // row, so its adjustments are the only record of who was paying.
+      if (!payerByPeriod.has(period)) payerByPeriod.set(period, row.payerId);
     } else {
       foreignPeriods.add(period);
     }
+  }
+
+  /** The payer/other pair that was in effect for `period`. */
+  const otherIdByPayer = new Map<string, string | null>();
+  async function membersForPeriod(period: string): Promise<{ payerId: string; otherId: string | null }> {
+    const payerId = payerByPeriod.get(period) ?? plan.payerId;
+    if (!otherIdByPayer.has(payerId)) otherIdByPayer.set(payerId, await otherMemberId(db, householdId, payerId));
+    return { payerId, otherId: otherIdByPayer.get(payerId) ?? null };
   }
 
   const candidatePeriods = new Set<string>(bookedByPeriod.keys());
@@ -320,18 +347,18 @@ export async function recalculatePlan(db: Database, householdId: string, viewerI
   }
 
   const lines: RecalculationLine[] = [];
-  if (otherId) {
-    for (const period of candidatePeriods) {
-      if (!isPlanComputable(items, incomeRows, period, plan.payerId, otherId)) continue;
-      // Occupied by an import/manual row rather than by the plan: that period
-      // is somebody else's, and an adjustment on top would double-count it.
-      if (!bookedByPeriod.has(period) && foreignPeriods.has(period)) continue;
-      const effectiveBookedCents = (bookedByPeriod.get(period) ?? 0) + (adjustmentSumByPeriod.get(period) ?? 0);
-      const computation = computePlanForPeriod({ period, items, incomes: incomeRows, payerId: plan.payerId, otherId });
-      const delta = computation.bookableCents - effectiveBookedCents;
-      if (delta !== 0) {
-        lines.push({ period, bookedCents: effectiveBookedCents, recomputedCents: computation.bookableCents, deltaCents: delta });
-      }
+  for (const period of candidatePeriods) {
+    const { payerId, otherId } = await membersForPeriod(period);
+    if (!otherId) continue;
+    if (!isPlanComputable(items, incomeRows, period, payerId, otherId)) continue;
+    // Occupied by an import/manual row rather than by the plan: that period
+    // is somebody else's, and an adjustment on top would double-count it.
+    if (!bookedByPeriod.has(period) && foreignPeriods.has(period)) continue;
+    const effectiveBookedCents = (bookedByPeriod.get(period) ?? 0) + (adjustmentSumByPeriod.get(period) ?? 0);
+    const computation = computePlanForPeriod({ period, items, incomes: incomeRows, payerId, otherId });
+    const delta = computation.bookableCents - effectiveBookedCents;
+    if (delta !== 0) {
+      lines.push({ period, bookedCents: effectiveBookedCents, recomputedCents: computation.bookableCents, deltaCents: delta });
     }
   }
   lines.sort((a, b) => (a.period < b.period ? -1 : a.period > b.period ? 1 : 0));
@@ -359,7 +386,10 @@ export async function recalculatePlan(db: Database, householdId: string, viewerI
         .values({
           id,
           householdId,
-          payerId: plan.payerId,
+          // The period's own payer, for the same reason the delta was computed
+          // against them: attributing a correction of a month A paid for to B
+          // flips the sign the balance moves in.
+          payerId: payerByPeriod.get(line.period) ?? plan.payerId,
           splitMode: "OTHER_ONLY",
           amountCents: line.deltaCents,
           description,

@@ -1,4 +1,4 @@
-import { previousPeriod } from "@toon/shared";
+import { currentPeriod, previousPeriod } from "@toon/shared";
 import type { MonthSpendSchema } from "@toon/shared";
 import type { z } from "zod";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -31,13 +31,17 @@ export function MonthSummaryCard({ householdId }: { householdId: string }) {
   const t = useT();
   const locale = useLocale();
 
-  const now = new Date();
-  const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  let from = currentPeriod;
+  // `currentPeriod` from @toon/shared, NOT the device's calendar: it resolves
+  // the month in Europe/Berlin, which is the boundary the server books and
+  // every other screen (`OverviewPage`, `PlanPage`) reads. Deriving it from
+  // `new Date()` puts this card a month off from the balance and the plan for
+  // any viewer whose browser is in another timezone, around every month-end.
+  const period = currentPeriod(Date.now());
+  let from = period;
   for (let i = 1; i < TREND_MONTHS; i += 1) from = previousPeriod(from);
 
-  const summary = useTransactionSummary(householdId, { from, to: currentPeriod });
-  const count = useTransactionCount(householdId, { from: currentPeriod, to: currentPeriod });
+  const summary = useTransactionSummary(householdId, { from, to: period });
+  const count = useTransactionCount(householdId, { from: period, to: period });
 
   if (summary.isPending) {
     return (
@@ -59,8 +63,8 @@ export function MonthSummaryCard({ householdId }: { householdId: string }) {
 
   const byMonth = summary.data.byMonth;
   const byPeriod = new Map<string, MonthSpend>(byMonth.map((entry) => [entry.period, entry]));
-  const thisMonth = byPeriod.get(currentPeriod)?.totalCents ?? 0;
-  const lastMonth = byPeriod.get(previousPeriod(currentPeriod))?.totalCents ?? 0;
+  const thisMonth = byPeriod.get(period)?.totalCents ?? 0;
+  const lastMonth = byPeriod.get(previousPeriod(period))?.totalCents ?? 0;
   const delta = thisMonth - lastMonth;
   const maxCents = Math.max(1, ...byMonth.map((entry) => entry.totalCents));
 
@@ -77,7 +81,7 @@ export function MonthSummaryCard({ householdId }: { householdId: string }) {
         <ul className="mt-4 flex h-20 items-end gap-2" aria-hidden="false">
           {byMonth.map((entry) => {
             const heightPct = Math.max(6, Math.round((entry.totalCents / maxCents) * 100));
-            const isCurrent = entry.period === currentPeriod;
+            const isCurrent = entry.period === period;
             return (
               <li
                 key={entry.period}

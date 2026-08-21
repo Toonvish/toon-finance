@@ -146,6 +146,15 @@ export const invites = sqliteTable(
     createdAt: integer("created_at").notNull().$defaultFn(now),
     acceptedAt: integer("accepted_at"),
     acceptedBy: text("accepted_by").references(() => users.id, { onDelete: "set null" }),
+    // What actually happened to the invite mail (docs/spec.md §3.5: the UI must
+    // never render `not_configured`/`failed` as success). PERSISTED because the
+    // send happens once, after the commit, and `GET .../invites` is re-read
+    // afterwards — a list that recomputed this could only ever guess, and
+    // guessing "not_configured" tells a household with a working SMTP server
+    // that its mail never went out.
+    mailDelivery: text("mail_delivery", { enum: ["sent", "not_configured", "failed"] })
+      .notNull()
+      .default("not_configured"),
   },
   (t) => [
     uniqueIndex("invites_token_uidx").on(t.token),

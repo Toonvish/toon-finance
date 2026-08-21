@@ -37,7 +37,7 @@ function buildInviteUrl(token: string): string {
   return `${origin.replace(/\/+$/, "")}/invite/${token}`;
 }
 
-function toInviteResponse(row: InviteRow, mailDelivery: InviteResponse["mailDelivery"]): InviteResponse {
+function toInviteResponse(row: InviteRow, mailDelivery: InviteResponse["mailDelivery"] = row.mailDelivery): InviteResponse {
   return {
     id: row.id,
     token: row.token,
@@ -109,8 +109,17 @@ export async function createInvite(
         }),
       )
     : undefined;
+  const mailDelivery = sent ? mailDeliveryOf(sent) : "not_configured";
 
-  return toInviteResponse(row, sent ? mailDeliveryOf(sent) : "not_configured");
+  // Persisted, so `listInvites` can answer honestly later on. The send is a
+  // one-off event AFTER the commit; the row is the only place its outcome
+  // survives, and the invite card re-reads the LIST (not this response) as soon
+  // as the create mutation invalidates it.
+  if (mailDelivery !== "not_configured") {
+    await db.update(invites).set({ mailDelivery }).where(eq(invites.id, id));
+  }
+
+  return toInviteResponse(row, mailDelivery);
 }
 
 /** Raw invite row for a token, or undefined. */
@@ -207,7 +216,7 @@ export async function acceptInvite(
 /** Paginated-in-shape invite list (no pagination params in the contract — a household has very few). */
 export async function listInvites(db: Database, householdId: string): Promise<InviteListResponse> {
   const rows = await db.select().from(invites).where(eq(invites.householdId, householdId)).orderBy(desc(invites.createdAt));
-  return { items: rows.map((row) => toInviteResponse(row, "not_configured")) };
+  return { items: rows.map((row) => toInviteResponse(row)) };
 }
 
 /** Revokes a pending invite (idempotent for already-revoked ones). */
