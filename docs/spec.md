@@ -1493,7 +1493,7 @@ Keine Gruppe importiert aus dem `features/`-Verzeichnis der anderen.
 ### 5.1 Wurzel `[GERÜST]`
 
 ```
-.bun-version                    "1.3.14"
+.bun-version                    "1.4.0"
 .env.example                    kommentierte Vorlage; .env selbst ist gitignored
 .gitignore                      node_modules/ dist/ data/ *.db *.db-* *.sqlite* .env .env.* !.env.example …
 package.json                    Root-Workspace: workspaces ["apps/*","packages/*"], alle Skripte

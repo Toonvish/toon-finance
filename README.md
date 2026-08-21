@@ -15,7 +15,7 @@ README beschreibt nur Setup und Struktur.
 
 | Teil | Technologie |
 | --- | --- |
-| Monorepo | Bun Workspaces (`apps/*`, `packages/*`), Bun 1.3.14 |
+| Monorepo | Bun Workspaces (`apps/*`, `packages/*`), Bun 1.4.0 |
 | `apps/api` | Bun.serve + Hono, drizzle-orm, `@libsql/client`, `@hono/zod-validator`, zod |
 | `apps/web` | React 19 + Vite + TypeScript, TanStack Router, TanStack Query, Tailwind CSS v4, vite-plugin-pwa |
 | `packages/shared` | Zod-Schemas + abgeleitete Typen + reine Fachlogik — als `@toon/shared` importiert |
@@ -52,7 +52,7 @@ in `docs/spec.md` §5.
 
 ## Setup
 
-Voraussetzung: [Bun](https://bun.sh) 1.3.14 (siehe `.bun-version`).
+Voraussetzung: [Bun](https://bun.sh) 1.4.0 (siehe `.bun-version`).
 
 ```bash
 bun install

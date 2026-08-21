@@ -16,7 +16,8 @@ export type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 export type DbLike = Database | Tx;
 
 /**
- * KNOWN LIBSQL LIMITATION (verified with @libsql/client 0.17.4 + Bun 1.3.14):
+ * KNOWN LIBSQL LIMITATION (verified with @libsql/client 0.17.4 + Bun 1.3.14,
+ * re-verified unchanged with Bun 1.4.0):
  * `client.transaction()` opens a SECOND connection, and for an in-memory URL
  * (`file::memory:`) that second connection is a brand-new, EMPTY database —
  * after the transaction commits, every table is gone. File-backed databases

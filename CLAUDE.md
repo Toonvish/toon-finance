@@ -50,7 +50,7 @@ Cent nicht stimmt und den niemand mehr rekonstruieren kann.
 7. **Docker single-origin + Caddy.** EIN Container; die API serviert die gebaute PWA über
    `WEB_DIST_DIR`. `PUBLIC_API_URL=""` → relative URLs → **kein CORS-Eintrag im Bootstrap**. Caddy davor
    terminiert nur TLS (ohne Secure Context registriert sich kein Service Worker, also keine PWA).
-8. **Stack**: Bun 1.3.14, Bun.serve + Hono, libSQL via `@libsql/client` + `drizzle-orm/libsql`,
+8. **Stack**: Bun 1.4.0, Bun.serve + Hono, libSQL via `@libsql/client` + `drizzle-orm/libsql`,
    React 19 + Vite + TanStack Router (code-based, kein Codegen) + TanStack Query + Tailwind v4,
    TypeScript 7 strict, kein `baseUrl`, kein `any` in exportierten Signaturen.
 
@@ -298,7 +298,9 @@ Die ersten sechzehn sind aus `toon-recipe` übernommen (dort teuer gelernt, hier
     „Deutsch" an, der nie etwas gewählt hat.
 26. Label-Maps, die zur Importzeit einfrieren, sind verboten. Wire-Wert `MINE_SPLIT`, Label über
     `TX_KIND_LABEL_KEYS` — genau wie Nav-Items Keys tragen.
-27. Bun 1.3 benutzt den **Isolated Linker**: die echten Pakete liegen unter `node_modules/.bun/`, jedes
+27. Bun benutzt den **Isolated Linker** (seit 1.3; unter 1.4.0 verifiziert unverändert — der neue
+    opt-in Global Virtual Store ändert das Layout nicht, `node_modules/.bun/` enthält weiterhin echte
+    Verzeichnisse ohne absolute Symlinks): die echten Pakete liegen unter `node_modules/.bun/`, jedes
     Workspace hat seinen eigenen Symlink-Baum. Ins Image müssen **drei** Pfade kopiert werden
     (`/app/node_modules`, `/app/apps/api/node_modules`, `/app/packages/shared/node_modules`), sonst
     baut und startet der Container und stirbt beim ersten Request mit

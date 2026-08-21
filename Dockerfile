@@ -20,7 +20,7 @@
 #     difference between a few minutes and tens of minutes.
 # =============================================================================
 
-ARG BUN_VERSION=1.3.14
+ARG BUN_VERSION=1.4.0
 
 # -----------------------------------------------------------------------------
 # manifests — the workspace manifests and the lockfile, shared by every stage
@@ -90,8 +90,10 @@ COPY apps/api ./apps/api
 COPY --from=web-build /app/apps/web/dist ./apps/web/dist
 
 # --- node_modules: THREE directories, not one -------------------------------
-# Bun 1.3 uses the ISOLATED linker for workspaces. The real packages live in the
-# store at `node_modules/.bun/<pkg>@<version>/`, and each workspace gets its OWN
+# Bun (since 1.3, unchanged in 1.4) uses the ISOLATED linker for workspaces. The
+# real packages live in the store at `node_modules/.bun/<pkg>@<version>/` as REAL
+# directories (verified under 1.4.0: no absolute symlinks — 1.4's opt-in global
+# virtual store does not change this layout), and each workspace gets its OWN
 # `node_modules` full of symlinks into it — `/app/node_modules` itself contains
 # nothing but `.bun`.
 #
