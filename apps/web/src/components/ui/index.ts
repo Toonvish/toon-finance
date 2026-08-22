@@ -19,6 +19,7 @@ export { ActionMenu, type ActionMenuItem, type ActionMenuProps } from "./ActionM
 export { Badge, type BadgeProps, type BadgeSize, type BadgeVariant } from "./Badge";
 export { Button, buttonClasses, type ButtonProps, type ButtonSize, type ButtonVariant } from "./Button";
 export { Card, CardHeader, type CardProps } from "./Card";
+export { Chip, type ChipProps, type ChipVariant } from "./Chip";
 export { ConfirmDialog, type ConfirmDialogProps } from "./ConfirmDialog";
 export { Dialog, type DialogProps } from "./Dialog";
 export { EmptyState, type EmptyStateProps } from "./EmptyState";

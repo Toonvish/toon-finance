@@ -7,8 +7,10 @@ import { useHousehold } from "@/lib/session";
  * `SideNav` carries the same information.
  *
  * There is no search/new icon here (unlike a recipe app's top bar) — search
- * lives inside `/transactions`'s filter panel and "Erfassen" is already a
- * tab (docs/spec.md §4.1), so a second entry point would be redundant.
+ * lives inside `/transactions`'s filter panel, and "Erfassen" already has the
+ * floating "+" in the thumb zone on every screen (`QuickAddFab`). A "+" up
+ * here would be a second entry point to the same sheet, in the corner of the
+ * screen a thumb reaches last.
  */
 export function TopBar() {
   const { household } = useHousehold();

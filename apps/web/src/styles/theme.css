@@ -1,11 +1,19 @@
 /*
  * toon-finance design tokens.
  *
- * ONE calm, ledger-appropriate palette: a steady slate-blue brand (trust,
- * not excitement — this app shows money two people owe each other) over the
- * same warm-sand neutrals `index.html`'s pre-paint script and `lib/theme.ts`
- * already commit to (`--bg: #faf5ee` / `#17120f`, so there is no flash
- * between the inline script's guess and this stylesheet's answer).
+ * ONE calm, ledger-appropriate palette: a steady PETROL brand (trust, not
+ * excitement — this app shows money two people owe each other) over cool
+ * paper neutrals. The same two hex values the pre-paint script in
+ * `index.html` and `lib/theme.ts` commit to (`--bg: #f5f3ef` / `#101312`)
+ * are the light/dark page background here, so there is no flash between the
+ * inline script's guess and this stylesheet's answer — change one, change
+ * all three.
+ *
+ * Three colour families, and they do not overlap:
+ *   petrol  the brand — navigation, primary actions, the balance hero,
+ *   gold    the FIXED-COST PLAN and nothing else (a gold card on this screen
+ *           always means "the plan"),
+ *   herb/danger  ledger semantics — owed to you is green, you owe is red.
  *
  * Every colour the app uses is a CSS custom property here; components only
  * ever reference the semantic Tailwind tokens `styles/index.css`'s
@@ -18,23 +26,24 @@
 :root {
   color-scheme: light dark;
 
-  /* --- brand: slate blue ------------------------------------------------ */
-  --toon-brand-50: #eef4fb;
-  --toon-brand-100: #d9e6f6;
-  --toon-brand-200: #b3cded;
-  --toon-brand-300: #85aedf;
-  --toon-brand-400: #5589cd;
-  --toon-brand-500: #35699f;
-  --toon-brand-600: #295380;
-  --toon-brand-700: #204163;
-  --toon-brand-800: #182e47;
-  --toon-brand-900: #101e30;
+  /* --- brand: petrol ---------------------------------------------------- */
+  --toon-brand-50: #eef7f7;
+  --toon-brand-100: #ddeeee;
+  --toon-brand-200: #b8dcdd;
+  --toon-brand-300: #86c3c5;
+  --toon-brand-400: #3f9b9d;
+  --toon-brand-500: #0f6e70;
+  --toon-brand-600: #0c5a5c;
+  --toon-brand-700: #0b4a4c;
+  --toon-brand-800: #093a3b;
+  --toon-brand-900: #072a2b;
 
   /* --- accent: muted gold (used sparingly — the fixed-cost plan's own colour) --- */
+  --toon-accent-200: #f0e2c4;
   --toon-accent-300: #e4c477;
   --toon-accent-400: #cca548;
   --toon-accent-500: #b08a2e;
-  --toon-accent-600: #8c6d22;
+  --toon-accent-600: #9c7423;
 
   /* --- ledger semantics: money owed to you is green, money you owe is red --- */
   --toon-herb-400: #6ba374;
@@ -44,42 +53,44 @@
   --toon-danger-500: #c0392b;
   --toon-danger-600: #9b2c20;
 
-  /* --- warm neutrals (unchanged from the GERÜST scaffold's --bg/--fg) ---- */
-  --toon-sand-25: #fdfaf6;
-  --toon-sand-50: #faf5ee;
-  --toon-sand-100: #f3ebe0;
-  --toon-sand-200: #e7dbcb;
-  --toon-sand-300: #d5c5b0;
-  --toon-sand-400: #b6a28a;
-  --toon-sand-500: #8d7c67;
-  --toon-sand-600: #6b5c4b;
-  --toon-sand-700: #4c4036;
-  --toon-sand-800: #322a23;
-  --toon-sand-900: #211b16;
-  --toon-sand-950: #17120f;
+  /* --- paper: the cool, slightly warm-grey surfaces the screens sit on --- */
+  --toon-paper-25: #fbfaf8;
+  --toon-paper-50: #f5f3ef;
+  --toon-paper-100: #edeae4;
+  --toon-paper-200: #e1ddd5;
+  --toon-paper-300: #cbc5ba;
+  --toon-paper-400: #aba498;
+
+  /* --- ink: the green-grey text greys (cooler than the paper on purpose) -- */
+  --toon-ink-400: #8a8f8b;
+  --toon-ink-500: #747976;
+  --toon-ink-600: #5f6461;
+  --toon-ink-700: #3f4442;
+  --toon-ink-900: #1b1d1c;
 
   /* --- semantic (light) --------------------------------------------------- */
-  --bg: var(--toon-sand-50);
-  --bg-elevated: var(--toon-sand-25);
+  --bg: var(--toon-paper-50);
+  --bg-elevated: #f0eee9;
   --surface: #ffffff;
-  --surface-2: var(--toon-sand-100);
-  --line: var(--toon-sand-200);
-  --line-strong: var(--toon-sand-300);
-  --fg: #211b16;
-  --fg-muted: var(--toon-sand-600);
-  --fg-subtle: var(--toon-sand-500);
+  --surface-2: var(--toon-paper-100);
+  --line: var(--toon-paper-200);
+  --line-strong: var(--toon-paper-300);
+  --fg: var(--toon-ink-900);
+  --fg-muted: var(--toon-ink-600);
+  --fg-subtle: var(--toon-ink-400);
   --brand: var(--toon-brand-500);
   --brand-hover: var(--toon-brand-600);
   --brand-fg: #ffffff;
   --brand-soft: var(--toon-brand-100);
   --brand-soft-fg: var(--toon-brand-700);
-  --accent-soft: #f7ecd2;
+  --accent-soft: #f6ecd6;
   --accent-soft-fg: var(--toon-accent-600);
+  --accent-line: var(--toon-accent-200);
   --success: var(--toon-herb-500);
-  --success-soft: #e6f0e6;
+  --success-soft: #e4efe5;
   --success-soft-fg: var(--toon-herb-600);
   --warning: var(--toon-accent-600);
-  --warning-soft: #fbeccd;
+  --warning-soft: #f6ecd6;
   --warning-soft-fg: #7d5406;
   --danger: var(--toon-danger-500);
   --danger-hover: var(--toon-danger-600);
@@ -87,12 +98,14 @@
   --danger-soft: #fbe6e3;
   --danger-soft-fg: var(--toon-danger-600);
   --ring: var(--toon-brand-400);
-  --overlay: rgb(33 27 22 / 45%);
-  --skeleton: var(--toon-sand-200);
+  --overlay: rgb(27 29 28 / 45%);
+  --skeleton: var(--toon-paper-200);
 
-  --elevation-soft: 0 1px 2px rgb(33 27 22 / 6%), 0 1px 3px rgb(33 27 22 / 5%);
-  --elevation-card: 0 1px 2px rgb(33 27 22 / 5%), 0 4px 14px -6px rgb(33 27 22 / 12%);
-  --elevation-pop: 0 10px 30px -10px rgb(33 27 22 / 28%), 0 2px 8px rgb(33 27 22 / 10%);
+  --elevation-soft: 0 1px 2px rgb(27 29 28 / 6%), 0 1px 3px rgb(27 29 28 / 5%);
+  --elevation-card: 0 1px 2px rgb(27 29 28 / 5%), 0 4px 14px -6px rgb(27 29 28 / 12%);
+  --elevation-pop: 0 10px 30px -10px rgb(27 29 28 / 28%), 0 2px 8px rgb(27 29 28 / 10%);
+  /* The floating "Erfassen" button — brand-tinted, so it reads as an action, not a shadow. */
+  --elevation-fab: 0 10px 24px -8px rgb(15 110 112 / 60%);
 
   /* Height of the mobile bottom tab bar / top bar (without the safe-area inset). */
   --tabbar-h: 3.75rem;
@@ -101,98 +114,114 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: var(--toon-sand-950);
-    --bg-elevated: var(--toon-sand-900);
-    --surface: #201a15;
-    --surface-2: #2a221c;
-    --line: #382e26;
-    --line-strong: #4a3d33;
-    --fg: #f3ece3;
-    --fg-muted: #b8a693;
-    --fg-subtle: #9c8b79;
+    --bg: #101312;
+    --bg-elevated: #161a19;
+    --surface: #1a1f1e;
+    --surface-2: #232827;
+    --line: #2e3432;
+    --line-strong: #414846;
+    --fg: #eef1ef;
+    --fg-muted: #a2aaa6;
+    --fg-subtle: #848d89;
     --brand: var(--toon-brand-300);
     --brand-hover: var(--toon-brand-200);
-    --brand-fg: #0d1a29;
-    --brand-soft: #1c3350;
+    --brand-fg: #062527;
+    --brand-soft: #123a3c;
     --brand-soft-fg: var(--toon-brand-200);
-    --accent-soft: #3a2f16;
+    --accent-soft: #37301b;
     --accent-soft-fg: var(--toon-accent-300);
+    --accent-line: #4c421f;
     --success: var(--toon-herb-400);
-    --success-soft: #22301f;
+    --success-soft: #1f2c20;
     --success-soft-fg: #a9c68c;
     --warning: var(--toon-accent-400);
-    --warning-soft: #3a2c0f;
+    --warning-soft: #37301b;
     --warning-soft-fg: var(--toon-accent-300);
     --danger: var(--toon-danger-400);
     --danger-hover: #ea8079;
     --danger-fg: #2a0f0c;
-    --danger-soft: #3d1c19;
+    --danger-soft: #3a1c19;
     --danger-soft-fg: #f0a9a2;
     --ring: var(--toon-brand-300);
-    --overlay: rgb(8 5 3 / 66%);
-    --skeleton: #322922;
+    --overlay: rgb(4 8 7 / 66%);
+    --skeleton: #272d2b;
 
     --elevation-soft: 0 1px 2px rgb(0 0 0 / 40%);
     --elevation-card: 0 1px 2px rgb(0 0 0 / 40%), 0 6px 18px -8px rgb(0 0 0 / 55%);
     --elevation-pop: 0 12px 34px -12px rgb(0 0 0 / 70%), 0 2px 10px rgb(0 0 0 / 45%);
+    --elevation-fab: 0 10px 24px -8px rgb(0 0 0 / 70%);
   }
 }
 
 /* Explicit override wins over the media query in both directions. */
 :root[data-theme="light"] {
   color-scheme: light;
-  --bg: var(--toon-sand-50);
-  --bg-elevated: var(--toon-sand-25);
+  --bg: var(--toon-paper-50);
+  --bg-elevated: #f0eee9;
   --surface: #ffffff;
-  --surface-2: var(--toon-sand-100);
-  --line: var(--toon-sand-200);
-  --line-strong: var(--toon-sand-300);
-  --fg: #211b16;
-  --fg-muted: var(--toon-sand-600);
-  --fg-subtle: var(--toon-sand-500);
+  --surface-2: var(--toon-paper-100);
+  --line: var(--toon-paper-200);
+  --line-strong: var(--toon-paper-300);
+  --fg: var(--toon-ink-900);
+  --fg-muted: var(--toon-ink-600);
+  --fg-subtle: var(--toon-ink-400);
   --brand: var(--toon-brand-500);
   --brand-hover: var(--toon-brand-600);
   --brand-fg: #ffffff;
   --brand-soft: var(--toon-brand-100);
   --brand-soft-fg: var(--toon-brand-700);
+  --accent-soft: #f6ecd6;
+  --accent-soft-fg: var(--toon-accent-600);
+  --accent-line: var(--toon-accent-200);
+  --success: var(--toon-herb-500);
+  --success-soft: #e4efe5;
+  --success-soft-fg: var(--toon-herb-600);
+  --warning: var(--toon-accent-600);
+  --warning-soft: #f6ecd6;
+  --warning-soft-fg: #7d5406;
   --danger: var(--toon-danger-500);
+  --danger-hover: var(--toon-danger-600);
   --danger-fg: #ffffff;
   --danger-soft: #fbe6e3;
   --danger-soft-fg: var(--toon-danger-600);
-  --overlay: rgb(33 27 22 / 45%);
-  --skeleton: var(--toon-sand-200);
+  --ring: var(--toon-brand-400);
+  --overlay: rgb(27 29 28 / 45%);
+  --skeleton: var(--toon-paper-200);
+  --elevation-fab: 0 10px 24px -8px rgb(15 110 112 / 60%);
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: var(--toon-sand-950);
-  --bg-elevated: var(--toon-sand-900);
-  --surface: #201a15;
-  --surface-2: #2a221c;
-  --line: #382e26;
-  --line-strong: #4a3d33;
-  --fg: #f3ece3;
-  --fg-muted: #b8a693;
-  --fg-subtle: #9c8b79;
+  --bg: #101312;
+  --bg-elevated: #161a19;
+  --surface: #1a1f1e;
+  --surface-2: #232827;
+  --line: #2e3432;
+  --line-strong: #414846;
+  --fg: #eef1ef;
+  --fg-muted: #a2aaa6;
+  --fg-subtle: #848d89;
   --brand: var(--toon-brand-300);
   --brand-hover: var(--toon-brand-200);
-  --brand-fg: #0d1a29;
-  --brand-soft: #1c3350;
+  --brand-fg: #062527;
+  --brand-soft: #123a3c;
   --brand-soft-fg: var(--toon-brand-200);
-  --accent-soft: #3a2f16;
+  --accent-soft: #37301b;
   --accent-soft-fg: var(--toon-accent-300);
+  --accent-line: #4c421f;
   --success: var(--toon-herb-400);
-  --success-soft: #22301f;
+  --success-soft: #1f2c20;
   --success-soft-fg: #a9c68c;
   --warning: var(--toon-accent-400);
-  --warning-soft: #3a2c0f;
+  --warning-soft: #37301b;
   --warning-soft-fg: var(--toon-accent-300);
   --danger: var(--toon-danger-400);
   --danger-hover: #ea8079;
   --danger-fg: #2a0f0c;
-  --danger-soft: #3d1c19;
+  --danger-soft: #3a1c19;
   --danger-soft-fg: #f0a9a2;
   --ring: var(--toon-brand-300);
-  --overlay: rgb(8 5 3 / 66%);
-  --skeleton: #322922;
+  --overlay: rgb(4 8 7 / 66%);
+  --skeleton: #272d2b;
+  --elevation-fab: 0 10px 24px -8px rgb(0 0 0 / 70%);
 }

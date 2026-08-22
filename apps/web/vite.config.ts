@@ -53,8 +53,8 @@ export default defineConfig(({ mode }) => {
           display: "standalone",
           display_override: ["standalone", "minimal-ui"],
           orientation: "any",
-          background_color: "#faf5ee",
-          theme_color: "#faf5ee",
+          background_color: "#f5f3ef",
+          theme_color: "#f5f3ef",
           categories: ["finance", "productivity"],
           icons: [
             { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },

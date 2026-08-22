@@ -35,6 +35,7 @@
   --color-brand-soft-fg: var(--brand-soft-fg);
   --color-accent-soft: var(--accent-soft);
   --color-accent-soft-fg: var(--accent-soft-fg);
+  --color-accent-line: var(--accent-line);
   --color-success: var(--success);
   --color-success-soft: var(--success-soft);
   --color-success-soft-fg: var(--success-soft-fg);
@@ -53,9 +54,10 @@
   --shadow-soft: var(--elevation-soft);
   --shadow-card: var(--elevation-card);
   --shadow-pop: var(--elevation-pop);
+  --shadow-fab: var(--elevation-fab);
 
-  --radius-card: 1rem;
-  --radius-sheet: 1.25rem;
+  --radius-card: 0.875rem;
+  --radius-sheet: 1.375rem;
 
   /* Generates h-tabbar/h-topbar (and related width/padding utilities) from
      the same height used by .pb-tabbar/.bottom-tabbar below — one source of truth. */

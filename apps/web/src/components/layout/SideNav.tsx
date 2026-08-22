@@ -1,17 +1,26 @@
 import { Link } from "@tanstack/react-router";
-import { LogOut, Wallet } from "lucide-react";
+import { LogOut, Plus, Wallet } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { initials } from "@/lib/format";
 import { useT } from "@/lib/i18n/I18nProvider.tsx";
+import { useQuickAdd } from "@/lib/quick-add";
 import { useHousehold, useLogout, useSession } from "@/lib/session";
+import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
 import { NAV_ITEMS, SECONDARY_NAV_ITEMS } from "./nav-items";
 
-/** Desktop sidebar (>= lg). Same destinations as the mobile tab bar, plus `SECONDARY_NAV_ITEMS`. */
+/**
+ * Desktop sidebar (>= lg). Same destinations as the mobile tab bar, plus
+ * `SECONDARY_NAV_ITEMS`, and above them the primary "Erfassen" button — the
+ * desktop counterpart of the phone's floating "+", opening the same
+ * `QuickAddDialog`. It sits ABOVE the nav list, because it is an action, not
+ * a destination; the `N` hint is the shortcut `lib/quick-add.tsx` binds.
+ */
 export function SideNav() {
   const { user } = useSession();
   const { household } = useHousehold();
   const logout = useLogout();
+  const quickAdd = useQuickAdd();
   const t = useT();
 
   return (
@@ -25,7 +34,19 @@ export function SideNav() {
         </span>
       </Link>
 
-      <nav aria-label={t("nav.overview")} className="mt-1 flex-1">
+      <Button
+        fullWidth
+        onClick={quickAdd.open}
+        aria-keyshortcuts="n"
+        leftIcon={<Plus className="size-4" strokeWidth={2.4} aria-hidden="true" />}
+      >
+        {t("nav.create")}
+        <kbd aria-hidden="true" className="ml-1 text-xs font-medium text-brand-fg/65">
+          N
+        </kbd>
+      </Button>
+
+      <nav aria-label={t("nav.overview")} className="flex-1">
         <ul className="flex flex-col gap-1">
           {[...NAV_ITEMS, ...SECONDARY_NAV_ITEMS].map((item) => (
             <li key={item.to}>

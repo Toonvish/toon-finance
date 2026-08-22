@@ -3,6 +3,7 @@ import { cn } from "@/lib/cn";
 import { BottomTabBar } from "./BottomTabBar";
 import { InstallPrompt } from "./InstallPrompt";
 import { OfflineBanner } from "./OfflineBanner";
+import { QuickAddFab } from "./QuickAddFab";
 import { SideNav } from "./SideNav";
 import { TopBar } from "./TopBar";
 import { UpdateBanner } from "./UpdateBanner";
@@ -16,6 +17,11 @@ import { UpdateBanner } from "./UpdateBanner";
  * must not re-apply any of it (docs/spec.md §4.10): a doubled `pb-tabbar`
  * leaves a screenful of dead space under the content and strands a sticky
  * bottom bar above the tab bar instead of on it.
+ *
+ * The floating "Erfassen" button and the tab bar are SIBLINGS of the
+ * scrolling column, not children of it: both are `fixed`, and nesting them
+ * inside a `transform`ed or `overflow`-clipped ancestor would re-parent their
+ * containing block and strand them mid-screen.
  *
  * `<main>` is also a growing FLEX ITEM *and* a flex column itself, so a page
  * root can say `flex-1` and fill the screen — the unbroken chain
@@ -42,6 +48,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           {children}
         </main>
       </div>
+      <QuickAddFab />
       <BottomTabBar />
     </div>
   );

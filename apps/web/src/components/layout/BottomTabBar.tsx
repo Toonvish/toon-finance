@@ -10,8 +10,9 @@ import { NAV_ITEMS } from "./nav-items";
  *
  * Tabs share the width via `flex-1` and their labels truncate rather than
  * wrap — a wrapped label would make one tab taller than its neighbours. See
- * `nav-items.ts` for why there are exactly four and why "Erfassen" is one of
- * them.
+ * `nav-items.ts` for why there are exactly four, and why "Erfassen" is NOT
+ * one of them any more: it is the floating "+" (`QuickAddFab`) that sits on
+ * every screen, and the tab it freed went to Fixkosten.
  */
 export function BottomTabBar() {
   const t = useT();

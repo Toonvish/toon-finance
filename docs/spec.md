@@ -1228,24 +1228,32 @@ Tab-Bar auf dem Handy und der Kopf der Sidebar; `SECONDARY_NAV_ITEMS` ist nur Si
 Katalog-**Keys**, keine Labels — ein zur Importzeit aufgelöstes Label friert die Tab-Bar auf der zuerst
 geladenen Sprache ein.
 
+> **REDESIGN (`Toon Finance - Redesign.dc.html`, umgesetzt).** „Erfassen" ist **kein Tab** mehr,
+> sondern ein globales Blatt hinter dem schwebenden „+" (`QuickAddFab`) bzw. dem Primärknopf der
+> Sidebar; der freigewordene vierte Tab gehört **Fixkosten**. Die Tabelle unten ist bereits der neue
+> Stand. Begründung und Konsequenzen: CLAUDE.md, Abschnitt „Navigation".
+
 | | Route | Key | Icon (lucide) |
 | --- | --- | --- | --- |
 | **Tab 1** | `/` | `nav.overview` — *Übersicht* | `wallet` |
 | **Tab 2** | `/transactions` | `nav.transactions` — *Buchungen* | `list` |
-| **Tab 3** | `/new` | `nav.create` — *Erfassen* | `plus-circle` |
+| **Tab 3** | `/plan` | `nav.plan` — *Fixkosten* | `repeat` |
 | **Tab 4** | `/settings` | `nav.profile` — *Profil* | `user` |
-| Sidebar | `/plan` | `nav.plan` — *Fixkosten* | `repeat` |
+| Überall | — | `nav.create` — *Erfassen* | `plus` (FAB + Sidebar-Knopf, `n`) |
 | Sidebar | `/categories` | `nav.categories` — *Kategorien* | `tags` |
 | Sidebar | `/household` | `nav.household` — *Haushalt* | `users` |
 
-Nur `/` ist `exact: true`.
+Nur `/` ist `exact: true`. `/new` bleibt als verlinkbare Route bestehen (PWA-Deep-Link, Empty-State),
+teilt sich aber mit dem Blatt eine einzige Implementierung (`lib/useCreateForm.ts` +
+`TransactionFormFields`).
 
 **Unterhalb von `lg` gibt es KEINE Sidebar.** Jeder `SECONDARY_NAV_ITEMS`-Eintrag muss darum von einem
 Tab-Screen aus erreichbar sein, sonst ist er auf dem Handy nicht existent:
 
-* **Fixkosten `/plan`** ← die Karte **`FixedCostCard`** auf `/` (Tab 1). Sie zeigt Monatsanteil, Quote
-  und „nächste Buchung" und ist als Ganzes ein Link auf `/plan`. Diese Karte zu löschen, kappt den
-  Fixkostenplan auf dem Handy — und er ist der Grund, warum es die App gibt.
+* **Fixkosten `/plan`** ist seit dem Redesign ein Tab und braucht diesen Weg nicht mehr. Die Karte
+  **`FixedCostCard`** auf `/` (Tab 1) bleibt trotzdem: sie zeigt Monatsanteil, Quote und „nächste
+  Buchung", ist als Ganzes ein Link auf `/plan`, und die Monatszahl gehört neben den Saldo, den sie
+  bewegt. Sie ist die einzige **goldene** Fläche der App — Gold heißt Fixkostenplan und nichts sonst.
 * **Kategorien `/categories`** ← der Fußzeilen-Link **`categories.manage`** („Kategorien verwalten") in
   der Karte **`SpendByCategoryCard`** auf `/` (Tab 1). Zusätzlich, aber **nicht** als Ersatz: der
   Kategorie-Picker im Erfassen-Flow hat unten denselben Link.
@@ -1346,7 +1354,17 @@ Alle vier mit `networkMode: "offlineFirst"`, alle vier persistiert.
 „Löschen" (mit `ConfirmDialog`). Bei generierten Zeilen steht dort stattdessen der Hinweis
 `transactions.generatedHint` mit einem Link auf `/plan`.
 
-### 4.5 `/new` — Erfassen (Tab 3) — der wichtigste Screen
+### 4.5 Erfassen — der wichtigste Screen
+
+> **REDESIGN (umgesetzt).** Dieser Screen ist jetzt ein **globales Blatt** (`QuickAddDialog`:
+> Bottom Sheet auf dem Handy, Dialog ab `sm`), geöffnet über den „+" auf jedem Screen, den
+> Sidebar-Primärknopf oder `n`; `⌘/Strg + Enter` bucht, `Esc` schließt, und nach dem Buchen bleibt
+> das Blatt offen und leert sich. Der **„Mehr Details"-Block ist ersatzlos entfallen** — Betrag, Art,
+> Beschreibung, Datum (Chips) und Kategorie (Chips + „Alle 21" öffnet das `CategorySheet`) stehen
+> gleichzeitig da. Die ASCII-Skizze unten zeigt noch den alten Aufbau; Felder, Copy und Fachlogik
+> gelten unverändert, nur der Rahmen und die Aufklapperei nicht.
+
+#### 4.5.1 Der ursprüngliche Aufbau (`/new`, Tab 3)
 
 Anforderung: **auf einem 390-px-Handy mit einer Hand bedienbar, vier Arten klar unterscheidbar,
 offline funktionsfähig.** Der Screen ist ein einspaltiges Formular ohne Karten-Verschachtelung.
@@ -2017,7 +2035,10 @@ Verbindliche Regeln:
 | `transactions.form.description` | Beschreibung |
 | `transactions.form.descriptionPlaceholder` | Wofür war das? |
 | `transactions.form.descriptionRequired` | Bitte beschreib die Buchung kurz. |
-| `transactions.form.moreDetails` | Mehr Details |
+| `transactions.form.categoryAll` | Alle {count} |
+| `transactions.quickAdd.open` | Buchung erfassen |
+| `transactions.quickAdd.shortcuts` | Esc schließt · ⌘↵ bucht |
+| `transactions.quickAdd.staysOpen` | Nach dem Buchen bleibt das Blatt offen — der nächste Beleg geht direkt weiter. |
 | `transactions.form.category` | Kategorie |
 | `transactions.form.categoryNone` | Ohne Kategorie |
 | `transactions.form.categorySearch` | Kategorie suchen |

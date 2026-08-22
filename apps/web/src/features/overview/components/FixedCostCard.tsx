@@ -10,11 +10,19 @@ import { useT } from "@/lib/i18n/I18nProvider.tsx";
 import { useRunPlan } from "../lib/queries";
 
 /**
- * Mobile's only door to `/plan` (docs/spec.md §4.1, §4.3) — deleting this
- * card kills the fixed-cost plan on a phone, and the plan is the reason the
- * app exists. The clickable area is a real `<Link>`, but the "Jetzt buchen"
- * action sits OUTSIDE it (a `<button>` nested in an `<a>` is invalid HTML and
- * would fire both handlers on tap).
+ * The plan's card on `/` (docs/spec.md §4.3). Fixkosten now also has its own
+ * tab (`nav-items.ts`), so this is no longer the ONLY door to `/plan` on a
+ * phone — but it stays, because the plan's monthly figure belongs next to the
+ * balance it moves, and because "1 Monat offen · Jetzt buchen" has to be
+ * visible without navigating anywhere.
+ *
+ * It is the app's only GOLD surface, and gold means exactly one thing:
+ * the fixed-cost plan. Petrol is the brand, gold is the plan — a gold card
+ * anywhere else would make both meaningless.
+ *
+ * The clickable area is a real `<Link>`, but the "Jetzt buchen" action sits
+ * OUTSIDE it (a `<button>` nested in an `<a>` is invalid HTML and would fire
+ * both handlers on tap).
  */
 export function FixedCostCard({
   householdId,
@@ -33,7 +41,7 @@ export function FixedCostCard({
 
   if (isLoading || !plan) {
     return (
-      <Card padding="none" className="overflow-hidden">
+      <Card tone="accent" padding="none" className="overflow-hidden">
         <div className="flex flex-col gap-2 p-4 sm:p-5">
           <Skeleton className="h-4 w-32" />
           <Skeleton className="h-8 w-40" />
@@ -58,25 +66,25 @@ export function FixedCostCard({
   }
 
   return (
-    <Card padding="none" className="overflow-hidden" interactive>
+    <Card tone="accent" padding="none" className="overflow-hidden" interactive>
       <Link to="/plan" className="block p-4 sm:p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-fg-muted">{t("plan.title")}</p>
+            <p className="text-xs font-semibold tracking-wide text-accent-soft-fg uppercase">{t("plan.title")}</p>
             {plan.plan.enabled && plan.current ? (
               <>
                 <p className="mt-1 text-2xl font-semibold tabular-nums text-fg">
                   {formatCurrency(plan.current.bookableCents)}
                 </p>
-                <p className="mt-0.5 text-sm text-fg-muted">
+                <p className="mt-0.5 text-sm text-accent-soft-fg">
                   {t("plan.shareOther", { name: otherName })} ·{" "}
                   {formatPercent(plan.current.quoteNumerator, plan.current.quoteDenominator)}
                 </p>
               </>
             ) : !plan.plan.enabled ? (
-              <p className="mt-1 text-sm text-fg-muted">{t("plan.disabledHint")}</p>
+              <p className="mt-1 text-sm text-accent-soft-fg">{t("plan.disabledHint")}</p>
             ) : (
-              <p className="mt-1 text-sm text-fg-muted">{t("plan.error.incomplete")}</p>
+              <p className="mt-1 text-sm text-accent-soft-fg">{t("plan.error.incomplete")}</p>
             )}
           </div>
           {plan.plan.lastBookedPeriod ? (
@@ -88,7 +96,7 @@ export function FixedCostCard({
       </Link>
 
       {pendingCount > 0 ? (
-        <div className="flex flex-col gap-2 border-t border-line bg-warning-soft/40 p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-2 border-t border-accent-line p-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-fg">{t("plan.pendingNotice", { count: pendingCount })}</p>
           <Button
             size="sm"

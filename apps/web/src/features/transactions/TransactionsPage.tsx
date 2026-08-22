@@ -15,6 +15,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/lib/i18n/I18nProvider.tsx";
+import { useQuickAdd } from "@/lib/quick-add";
 import { formatCurrency } from "@/lib/format";
 import { useCurrentUser, useOtherMember, useRequiredHouseholdId } from "@/lib/session";
 import { ActiveFilterChips, TransactionFilterPanel, useUrlTransactionFilters } from "./components/TransactionFilters";
@@ -28,6 +29,7 @@ export function TransactionsPage() {
   const householdId = useRequiredHouseholdId();
   const viewer = useCurrentUser();
   const { member: other } = useOtherMember();
+  const quickAdd = useQuickAdd();
   const otherName = other?.displayName ?? "";
 
   const urlFilters = useUrlTransactionFilters();
@@ -139,7 +141,7 @@ export function TransactionsPage() {
           setHideAggregates(false);
           setOnlyMine(false);
         }}
-        onCreateFirst={() => void navigate({ to: "/new" })}
+        onCreateFirst={quickAdd.open}
       />
 
       <TransactionFilterPanel

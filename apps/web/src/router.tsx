@@ -14,8 +14,10 @@
  */
 import { Link, Outlet, createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
 import { AppShell } from "@/components/layout/AppShell";
+import { QuickAddHost } from "@/features/transactions/QuickAddDialog";
 import { lazyPage } from "@/lib/lazy-page";
 import { useT } from "@/lib/i18n/I18nProvider.tsx";
+import { QuickAddProvider } from "@/lib/quick-add";
 import { RequireAuth, RequireHousehold, SessionProvider } from "@/lib/session";
 import { buttonClasses } from "@/components/ui/Button";
 import { ForgotPasswordPage } from "@/features/auth/ForgotPasswordPage";
@@ -136,13 +138,23 @@ const inviteRoute = createRoute({
 /* guarded app shell                                                         */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * `QuickAddProvider` wraps the shell rather than living inside it: the "+"
+ * (`AppShell`), the sidebar's primary button (`SideNav`) and the sheet
+ * itself (`features/transactions`) all read the same switch, and
+ * `components/layout` may not import a feature. The switch therefore sits in
+ * `lib/`, and this is the one place that knows about both halves.
+ */
 function AppLayout() {
   return (
     <RequireAuth>
       <RequireHousehold>
-        <AppShell>
-          <Outlet />
-        </AppShell>
+        <QuickAddProvider>
+          <AppShell>
+            <Outlet />
+          </AppShell>
+          <QuickAddHost />
+        </QuickAddProvider>
       </RequireHousehold>
     </RequireAuth>
   );

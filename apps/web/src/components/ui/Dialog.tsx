@@ -56,11 +56,20 @@ export function Dialog({
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
+    /*
+     * `[data-autofocus]` is asked for FIRST, in its own query. Folded into
+     * one comma-separated selector it never won: `querySelector` returns the
+     * first element in DOCUMENT order matching any branch, and the close
+     * button in the header precedes everything in the body — so the
+     * quick-add sheet opened with the "X" focused instead of the amount.
+     */
     const panel = panelRef.current;
     const focusTarget =
+      panel?.querySelector<HTMLElement>("[data-autofocus]") ??
       panel?.querySelector<HTMLElement>(
-        "[data-autofocus], input:not([type=hidden]), textarea, select, button, [href], [tabindex]:not([tabindex='-1'])",
-      ) ?? panel;
+        "input:not([type=hidden]), textarea, select, button, [href], [tabindex]:not([tabindex='-1'])",
+      ) ??
+      panel;
     focusTarget?.focus({ preventScroll: true });
 
     return () => {

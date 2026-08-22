@@ -20,12 +20,20 @@ import { LoadingBlock } from "@/components/ui/Spinner";
 type PageModule = Record<string, unknown>;
 
 /**
- * Every page module in the app, keyed by path relative to the vite root.
- * The public auth screens the router imports statically are excluded,
- * otherwise rollup cannot code-split them (INEFFECTIVE_DYNAMIC_IMPORT).
+ * Every SCREEN module in the app, keyed by path relative to the vite root.
+ *
+ * `*Page.tsx` directly under a feature folder, and nothing else: every
+ * `candidates` entry the router passes has that shape, and a wider glob
+ * also swallowed the shared building blocks (`TransactionFormFields`, the
+ * `components/` and `lib/` files). Any of those that a statically-imported
+ * module also pulls in then earns an INEFFECTIVE_DYNAMIC_IMPORT warning,
+ * because rollup cannot honour both.
+ *
+ * The public auth screens the router imports statically stay excluded for
+ * the same reason.
  */
 const pageModules = import.meta.glob<PageModule>([
-  "/src/features/**/*.tsx",
+  "/src/features/*/*Page.tsx",
   "!/src/features/auth/LoginPage.tsx",
   "!/src/features/auth/RegisterPage.tsx",
   "!/src/features/auth/ForgotPasswordPage.tsx",

@@ -1,20 +1,32 @@
 /**
- * The transaction list body (docs/spec.md §4.4): grouped by day with a
- * sticky date heading, "Mehr laden" pagination (never infinite scroll — a
- * list someone is hunting a date in must not move under their finger), and
- * the two distinct empty states (`transactions.empty.*` vs
- * `transactions.emptyFiltered.*`).
+ * The transaction list body (docs/spec.md §4.4): grouped by day, "Mehr
+ * laden" pagination (never infinite scroll — a list someone is hunting a
+ * date in must not move under their finger), and the two distinct empty
+ * states (`transactions.empty.*` vs `transactions.emptyFiltered.*`).
+ *
+ * A day is ONE card with a tinted heading strip and hairline-separated rows,
+ * not a stack of individually bordered cards. Both the borders and the
+ * per-row date were saying the same thing twice; folding them into the day
+ * heading is what buys the density, and the heading earns its line back by
+ * carrying the day's TOTAL — the number people actually scan a ledger for.
+ *
+ * The total is the plain sum of `amountCents`, settlements included: this is
+ * "what moved on this day", not "what we consumed". The expenses-only view
+ * lives on `/` (`isExpense`, docs/ledger-spec.md §2.3), and mixing the two
+ * definitions in one app is how a ledger stops adding up.
  */
 import { useEffect, useMemo, useState } from "react";
 import { List } from "lucide-react";
 import type { TransactionListQuery, TransactionResponse } from "@toon/shared";
+import { AmountText } from "@/components/money/AmountText";
+import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { SkeletonList } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/Button";
 import type { ActionMenuItem } from "@/components/ui/ActionMenu";
 import { useT } from "@/lib/i18n/I18nProvider.tsx";
-import { formatDate } from "@/lib/format";
+import { formatDayHeading } from "@/lib/format";
 import { useTransactions } from "../lib/queries";
 import { TransactionRow } from "./TransactionRow";
 
@@ -109,26 +121,31 @@ export function TransactionList({
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      {groups.map(([key, dayItems]) => (
-        <section key={key} aria-label={formatDate(dayItems[0]?.bookedAt)}>
-          <h2 className="sticky top-topbar z-10 -mx-gutter mb-2 bg-bg/95 px-gutter py-1.5 text-xs font-semibold tracking-wide text-fg-muted uppercase backdrop-blur-md lg:top-0 lg:mx-0 lg:px-0">
-            {formatDate(dayItems[0]?.bookedAt)}
-          </h2>
-          <div className="flex flex-col gap-2">
-            {dayItems.map((transaction) => (
-              <TransactionRow
-                key={transaction.id}
-                transaction={transaction}
-                viewerId={viewerId}
-                categoryLabel={transaction.categoryId ? (categoryLabelById[transaction.categoryId] ?? null) : null}
-                onOpen={() => onOpen(transaction)}
-                actions={rowActions?.(transaction)}
-              />
-            ))}
-          </div>
-        </section>
-      ))}
+    <div className="flex flex-col gap-4">
+      {groups.map(([key, dayItems]) => {
+        const heading = formatDayHeading(dayItems[0]?.bookedAt);
+        const dayTotalCents = dayItems.reduce((sum, item) => sum + item.amountCents, 0);
+        return (
+          <Card key={key} as="section" padding="none" aria-label={heading} className="overflow-hidden">
+            <h2 className="flex items-center justify-between gap-3 bg-surface-2 px-4 py-2 text-[0.7rem] font-semibold tracking-wide text-fg-muted uppercase">
+              <span className="min-w-0 truncate">{heading}</span>
+              <AmountText cents={dayTotalCents} size="sm" className="shrink-0 tracking-normal normal-case" />
+            </h2>
+            <div className="divide-y divide-line">
+              {dayItems.map((transaction) => (
+                <TransactionRow
+                  key={transaction.id}
+                  transaction={transaction}
+                  viewerId={viewerId}
+                  categoryLabel={transaction.categoryId ? (categoryLabelById[transaction.categoryId] ?? null) : null}
+                  onOpen={() => onOpen(transaction)}
+                  actions={rowActions?.(transaction)}
+                />
+              ))}
+            </div>
+          </Card>
+        );
+      })}
 
       {items.length < total ? (
         <Button variant="secondary" onClick={() => setPageCount((count) => count + 1)} loading={result.isFetching}>

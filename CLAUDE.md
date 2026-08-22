@@ -130,7 +130,7 @@ packages/shared/src/
   schemas/*.ts   i18n/*.ts
 ```
 
-## Navigation (vier Tabs, und was bewusst keiner ist)
+## Navigation (vier Tabs, und was bewusst keiner mehr ist)
 
 `components/layout/nav-items.ts` ist die einzige Quelle. `NAV_ITEMS` ist Tab-Bar **und** Sidebar-Kopf,
 `SECONDARY_NAV_ITEMS` ist nur Sidebar. Die Items tragen Katalog-**Keys**, keine Labels — ein zur
@@ -138,23 +138,41 @@ Importzeit aufgelöstes Label friert die Tab-Bar auf der zuerst geladenen Sprach
 
 | | |
 | --- | --- |
-| Tabs | Übersicht `/` · Buchungen `/transactions` · Erfassen `/new` · Profil `/settings` |
-| Nur Sidebar | Fixkosten `/plan` · Kategorien `/categories` · Haushalt `/household` |
+| Tabs | Übersicht `/` · Buchungen `/transactions` · Fixkosten `/plan` · Profil `/settings` |
+| Nur Sidebar | Kategorien `/categories` · Haushalt `/household` |
+| Überall | **Erfassen** — der schwebende „+" (`QuickAddFab`) bzw. der Primärknopf der Sidebar |
 
 **Unter `lg` gibt es keine Sidebar**, also MUSS jedes `SECONDARY_NAV_ITEMS`-Ziel von einem Tab-Screen
 erreichbar sein, sonst existiert es auf dem Handy nicht:
 
-- **Fixkosten** ← die `FixedCostCard` auf `/`. Diese Karte zu löschen kappt den Fixkostenplan auf dem
-  Handy — und er ist der Grund, warum es die App gibt.
 - **Kategorien** ← der Fußzeilen-Link in der `SpendByCategoryCard` auf `/` (zusätzlich, nicht als
   Ersatz: derselbe Link unten im Kategorie-Sheet des Erfassen-Flows).
 - **Haushalt** ← die `HouseholdCard` auf `/settings`. Dort sitzt die Einladung der zweiten Person; ohne
   sie ist ein frisch installierter Haushalt auf dem Handy nicht zu zweit zu bekommen.
 
-**Erfassen ist ein Tab, kein schwebender Knopf.** Es ist der einzige Screen, den beide mehrmals pro
-Woche benutzen, und der einzige, der offline funktionieren muss. Ein FAB wäre ein Ziel weniger in der
-Daumenzone und würde beim Scrollen Inhalt verdecken. Ein eigener Saldo-Tab wäre redundant — der Saldo
-ist die Kopfzeile von `/`.
+**Erfassen ist ein globales Blatt, kein Tab** (Redesign, `Toon Finance - Redesign.dc.html`). Der „+"
+liegt unten rechts auf **jedem** Screen und öffnet auf dem Handy ein Bottom Sheet, auf dem Desktop
+einen Dialog — beide zeigen Betrag, Art, Beschreibung, Datum und Kategorie **gleichzeitig**;
+„Mehr Details" gibt es nicht mehr und darf nicht zurückkommen. Das kostet keine Navigation, und der
+freigewordene vierte Tab geht an **Fixkosten**, das vorher nur über die `FixedCostCard` erreichbar war.
+
+Die zwei alten Einwände gegen einen FAB sind beantwortet, nicht ignoriert: er sitzt unten **rechts**
+in der Daumenzone (nicht mittig, wo er mit der Tab-Bar konkurrierte) und klebt über der Leiste per
+`.bottom-tabbar`, nie `bottom-0`. Dass er beim Scrollen Inhalt überdeckt, ist der Preis — deshalb
+stehen die Beträge in den Listen links von der rechten Kante, nie darunter.
+
+`/new` bleibt als **Route** bestehen (verlinkbares Ziel, PWA-Deep-Link), ist aber kein Tab mehr und
+teilt sich mit dem Blatt exakt eine Implementierung: `features/transactions/lib/useCreateForm.ts`
+(Validierung, `mutationId`, Leeren, Undo-Toast) plus `TransactionFormFields`. Zwei Rahmen, ein
+Formular — nie eine zweite Kopie.
+
+Die `FixedCostCard` auf `/` bleibt trotzdem: die Monatszahl gehört neben den Saldo, den sie bewegt.
+Ein eigener Saldo-Tab wäre weiterhin redundant — der Saldo ist die Kopfzeile von `/`.
+
+**Drei Farbflächen, drei Bedeutungen** (`styles/theme.css`): **Petrol** ist die Marke und füllt genau
+EINE Fläche, den `BalanceHero` (`Card tone="brand"`). **Gold** heißt Fixkostenplan und nichts sonst
+(`Card tone="accent"`). **Grün/Rot** bleiben Ledger-Semantik. Eine zweite petrolgefüllte Karte nimmt
+dem Saldo den ersten Blick; eine goldene Karte anderswo macht beide Farben bedeutungslos.
 
 ## Konventionen
 
@@ -509,6 +527,38 @@ Die ersten sechzehn sind aus `toon-recipe` übernommen (dort teuer gelernt, hier
     und 4 verlorenen `day`-Präzisionen. Rückgängig gemacht, in `dates.ts` und im Test begründet.
     *Ein Befund kann mechanisch stimmen und von den Daten widerlegt werden — am Korpus messen, nicht
     am Modell im Kopf.*
+
+**Aus dem Redesign (globales Erfassen-Blatt, Petrol-Palette)**
+
+57. **`cn()` ist reines `clsx`, kein `tailwind-merge` — ein `className`, das eine Basisklasse
+    überschreiben soll, gewinnt oder verliert nach Tailwinds EMIT-Reihenfolge, nicht nach der
+    Reihenfolge im Attribut.** `<Card className="bg-brand">` rendert `bg-surface bg-brand`, beide mit
+    gleicher Spezifität, und `bg-surface` stand später im Stylesheet: der Saldo-Hero blieb weiß,
+    während `text-brand-fg` auf demselben Element durchkam. Es knallt nichts, es sieht nur falsch aus,
+    und nur im Browser. Deshalb hat `Card` ein `tone` (`surface`/`brand`/`accent`) und `Button` die
+    Varianten `inverse`/`inverseOutline`: eine Farbfläche wird **ausgetauscht, nie überlagert**. Wer
+    eine neue braucht, erweitert das Primitive — dieselbe Falle traf auch `Skeleton`
+    (`BalanceHero`s Ladezustand bleibt deshalb bewusst neutral).
+58. **`querySelector("[data-autofocus], input, …, button, …")` liefert das erste Element in
+    DOKUMENT-Reihenfolge, das IRGENDEINEN Zweig trifft — nicht das erste, das den ersten Zweig
+    trifft.** `Dialog`s Schließen-Knopf steht im Header vor allem Inhalt, also bekam er den Fokus und
+    das Erfassen-Blatt öffnete auf „X" statt auf dem Betrag. `[data-autofocus]` braucht eine
+    **eigene** Abfrage davor.
+59. **`AmountInput` hält einen eigenen Textpuffer; er muss dem Prop folgen, wenn die Änderung von
+    AUSSEN kam.** Das Blatt bleibt nach dem Buchen offen und leert das Formular — der Puffer zeigte
+    weiter „12,50", während `amountCents` schon `null` war, und „Buchen" antwortete „Bitte gib einen
+    Betrag ein" über einer Zahl, die der Nutzer sieht. Verglichen wird gegen den zuletzt SELBST
+    emittierten Wert, nicht gegen jedes `valueCents`: sonst schreibt der Sync „12," beim Tippen zu
+    „12,00" um.
+60. **`import.meta.glob("/src/features/**/*.tsx")` schluckte auch die geteilten Bausteine.** Sobald
+    ein statisch importiertes Modul (der `QuickAddDialog` im App-Shell) einen davon mitzieht, meldet
+    Rollup INEFFECTIVE_DYNAMIC_IMPORT. Der Glob in `lib/lazy-page.tsx` steht deshalb auf
+    `"/src/features/*/*Page.tsx"` — genau die Form, die `candidates` überhaupt anfragt.
+61. **Auf 390 px passen Kategorie, „Dein Anteil …", Betrag und Overflow-Trigger nicht in eine
+    Zeile.** Nacheinander gaben die Kategorie („Lebens…") und dann die Beschreibung nach — beides
+    Dinge, über die man eine Zeile wiederfindet. `TransactionRow` zeigt unter `sm` deshalb nur die
+    nackte Anteilszahl rechts unter dem Betrag, mit dem Satz auf `aria-label`; ab `sm` steht er
+    ausgeschrieben in der Meta-Zeile. Gemessen im Headless-Browser, nicht geschätzt (Gotcha 31).
 
 ## Verifikations-Gates
 

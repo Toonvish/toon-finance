@@ -3,7 +3,7 @@
  * choice is stored in localStorage and applied as `data-theme` on <html>, which the
  * CSS variables in styles/theme.css react to.
  *
- * The two hex values below (`#faf5ee` / `#17120f`) MUST stay identical to the
+ * The two hex values below (`#f5f3ef` / `#101312`) MUST stay identical to the
  * ones in `index.html`'s inline pre-paint script ([GERÜST]) and to `--bg` in
  * `styles/theme.css` — three independent copies of the same fact, because the
  * inline script runs before any module has loaded and cannot import this file.
@@ -13,8 +13,8 @@ import { readStorage, storageKeys, writeStorage } from "./storage";
 
 export type ThemePreference = "system" | "light" | "dark";
 
-const LIGHT_BG = "#faf5ee";
-const DARK_BG = "#17120f";
+const LIGHT_BG = "#f5f3ef";
+const DARK_BG = "#101312";
 
 export function readThemePreference(): ThemePreference {
   const stored = readStorage(storageKeys.theme);

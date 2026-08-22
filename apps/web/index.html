@@ -11,7 +11,7 @@
     />
     <meta name="color-scheme" content="light dark" />
     <!-- Updated at runtime by lib/theme.ts so the browser UI matches the rendered theme. -->
-    <meta name="theme-color" content="#faf5ee" />
+    <meta name="theme-color" content="#f5f3ef" />
 
     <!-- installable PWA — <link rel="manifest"> is injected by vite-plugin-pwa -->
     <meta name="application-name" content="toon-finance" />
@@ -42,9 +42,9 @@
         var dark =
           pref === "dark" ||
           (pref !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-        document.documentElement.style.backgroundColor = dark ? "#17120f" : "#faf5ee";
+        document.documentElement.style.backgroundColor = dark ? "#101312" : "#f5f3ef";
         var meta = document.querySelector('meta[name="theme-color"]');
-        if (meta) meta.setAttribute("content", dark ? "#17120f" : "#faf5ee");
+        if (meta) meta.setAttribute("content", dark ? "#101312" : "#f5f3ef");
       } catch (error) {
         /* private mode: ignore */
       }

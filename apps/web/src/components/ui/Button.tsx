@@ -2,7 +2,7 @@ import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { Spinner } from "./Spinner";
 
-export type ButtonVariant = "primary" | "secondary" | "outline" | "ghost" | "danger";
+export type ButtonVariant = "primary" | "secondary" | "outline" | "ghost" | "danger" | "inverse" | "inverseOutline";
 export type ButtonSize = "sm" | "md" | "lg";
 
 const base =
@@ -17,6 +17,19 @@ const variants: Record<ButtonVariant, string> = {
   outline: "border border-line-strong bg-surface text-fg hover:bg-surface-2",
   ghost: "text-fg hover:bg-surface-2",
   danger: "bg-danger text-danger-fg shadow-soft hover:bg-danger-hover",
+  /*
+   * The two variants for buttons sitting ON a brand-filled surface (the
+   * balance hero, `Card tone="brand"`). They swap `--brand` and `--brand-fg`,
+   * so they invert with the theme instead of hard-coding white — in dark mode
+   * the hero is light petrol and these become dark, which is what keeps them
+   * legible.
+   *
+   * They exist as VARIANTS rather than as a `className` override for the same
+   * reason `Card` grew a `tone`: `cn()` is plain clsx, so an override of
+   * `background-color` loses or wins by Tailwind's emit order, not by intent.
+   */
+  inverse: "bg-brand-fg text-brand hover:bg-brand-fg/90",
+  inverseOutline: "border border-brand-fg/35 text-brand-fg hover:bg-brand-fg/10",
 };
 
 /** Every size keeps a >=44px touch target except `sm`, which is for dense toolbars. */
