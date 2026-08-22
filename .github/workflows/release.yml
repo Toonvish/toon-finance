@@ -1,24 +1,35 @@
-# Publishes the image to GHCR (docs/spec.md §5.1). ci.yml verifies the code;
-# THIS is the only workflow that ever pushes an image — a tag push is the
-# trigger, not a merge to main, so a release is always a deliberate act.
+# Builds the container image and publishes it to GHCR (docs/spec.md §5.1).
 #
-# BUILDS, THEN DEPLOYS. The deploy job is optional in practice: without the
-# DEPLOY_SSH_* secrets and the `production` environment it simply never runs,
-# and rolling out stays the manual `docker compose pull && docker compose up -d`
-# from the toon-edge README. The SSH key it uses is pinned to a forced command
-# on the server (docker/toon-deploy.sh, installed as `toon-finance-deploy`), so
-# it cannot open a shell there — see deploy.yml.
+# EVERY PUSH TO `main` PUBLISHES, exactly as in toon-recipe: `type=raw,value=latest`
+# is what makes `TOON_IMAGE=…:latest` in docker/env.example resolve at all, and it
+# is gated on `enable={{is_default_branch}}` so a branch build never moves the tag
+# the server pulls. A `v*` tag additionally publishes the semver tags. This used to
+# be tags-only, which meant a repo with no tags had NO package in GHCR at all — and
+# an unauthenticated `docker compose pull` on the server answers that with the same
+# `denied` as a private package, so the error said nothing about the cause.
 #
-# `latest` COMES FROM docker/metadata-action's DEFAULT `flavor: latest=auto`,
-# which tags a semver tag push as `:latest`. That is why `TOON_IMAGE=…:latest`
-# in docker/env.example resolves at all — and why it only starts resolving
-# after the FIRST `v*.*.*` tag. A `workflow_dispatch` run off a tagless commit
-# produces no tags and therefore nothing to deploy; use it only from a tag.
+# TWO ARCHITECTURES, BOTH DELIBERATE: amd64 is the ordinary x86 VPS (and a laptop
+# for testing), arm64 covers the cheap ARM instances and an Apple-Silicon dev
+# machine. 32-bit is not buildable at all — there is no Bun for it.
+#
+# HOW THE CROSS-BUILD STAYS FAST: the Dockerfile builds the web bundle on the BUILD
+# platform (`--platform=$BUILDPLATFORM`), because its output is
+# architecture-independent. Only the native node_modules install runs under QEMU.
+# Without that split, a full arm64 build under emulation takes roughly ten times as
+# long.
 name: Release
 
+#
+# BUILDS, THEN DEPLOYS. The deploy job is skipped unless the repository VARIABLE
+# `DEPLOY_ENABLED` is `true`; until then, rolling out stays the manual
+# `docker compose pull && docker compose up -d` from the toon-edge README. The SSH
+# key it uses is pinned to a forced command on the server (docker/toon-deploy.sh,
+# installed as `toon-finance-deploy`), so it cannot open a shell there — see
+# deploy.yml.
 on:
   push:
-    tags: ["v*.*.*"]
+    branches: [main]
+    tags: ["v*"]
   workflow_dispatch:
     inputs:
       deploy:
@@ -26,74 +37,132 @@ on:
         type: boolean
         default: false
 
-permissions:
-  contents: read
-  packages: write
-
 concurrency:
   # Never let two publishes race for the `latest` tag.
   group: release
   cancel-in-progress: false
 
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+permissions:
+  contents: read
+
 jobs:
-  publish:
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
     outputs:
-      # Consumed by the deploy job below, and printed for the human who wants to
-      # pin or roll back by hand.
+      # Consumed by the deploy job below, and printed in the step summary for the
+      # human who wants to pin or roll back by hand.
       digest: ${{ steps.build.outputs.digest }}
       version: ${{ steps.meta.outputs.version }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: docker/setup-qemu-action@v3
+      # Publishing an image that fails its own test suite is not a release. No
+      # DATABASE_URL is set on purpose: env.ts forces a fresh temp-file DB under
+      # NODE_ENV=test (Gotcha 2), and a runner that could reach a real database
+      # would be a bug.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun test
+
+      # QEMU is what lets an amd64 runner produce arm64 layers.
+      - uses: docker/setup-qemu-action@v4
         with:
           platforms: arm64
-
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
-          registry: ghcr.io
+          registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Derive image tags
+      - name: Tags and labels
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
+            type=ref,event=branch
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=sha,format=short
+            type=sha,format=long
+            type=raw,value=latest,enable={{is_default_branch}}
 
-      # linux/amd64 + linux/arm64 (Dockerfile.md's "BUILT FOR A SMALL 64-BIT
-      # LINUX SERVER" — no 32-bit target, there is no Bun build for one).
       - name: Build and push
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/arm64,linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # provenance: false keeps the manifest list a plain multi-arch index.
+          # The attestation manifests that buildx adds otherwise confuse older
+          # dockers, and a distro-packaged docker on a small server is often
+          # exactly that old.
+          provenance: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # Rolls the image THIS run produced onto the server. Pinned by DIGEST rather
-  # than by `:latest`, so what gets deployed is exactly what was just built even
-  # if another release lands in between.
+      # The digest is the useful half of this summary: it is what you paste into the
+      # server's `.env` as TOON_IMAGE to deploy exactly this build instead of a
+      # moving `:latest`.
+      - name: Summary
+        run: |
+          {
+            echo "### Image veröffentlicht"
+            echo
+            echo '```'
+            echo "${{ steps.meta.outputs.tags }}"
+            echo '```'
+            echo
+            echo "Digest: \`${{ steps.build.outputs.digest }}\`"
+            echo
+            echo "Ausrollen übernimmt der Deploy-Job. Von Hand auf dem Server geht es auch:"
+            echo
+            echo '```bash'
+            echo "cd /opt/toon-finance && docker compose pull && docker compose up -d --remove-orphans"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Deploys over SSH. Split into its own job so a failed deploy never un-publishes
+  # a good image, and gated on the `production` environment so GitHub can require a
+  # manual approval before anything touches the server.
   deploy:
-    needs: publish
-    # A tag push deploys; a manual run only when explicitly asked.
+    needs: build
+    # DEPLOY_ENABLED IS THE MASTER SWITCH, and it has to be a repository VARIABLE:
+    # the `secrets` context is not available in a job-level `if`, so "are the
+    # DEPLOY_SSH_* secrets configured?" is a question this condition cannot ask.
+    # Without it, a repository that never set up a server still runs this job on
+    # every push to main and fails it on the empty known_hosts — a permanent red X
+    # that says nothing. Set it to `true` (Settings -> Variables) once the five
+    # secrets in deploy.yml exist.
+    #
+    # Beyond that: a push to main or a version tag deploys automatically, while a
+    # manual run only deploys when the checkbox was ticked — without the event check
+    # below, the `refs/heads/main` clause would deploy anyway and the input would be
+    # a lie.
     if: >-
-      github.event_name == 'push' ||
-      (github.event_name == 'workflow_dispatch' && inputs.deploy)
+      vars.DEPLOY_ENABLED == 'true' &&
+      ((github.event_name == 'push' &&
+        (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))) ||
+       (github.event_name == 'workflow_dispatch' && inputs.deploy))
     uses: ./.github/workflows/deploy.yml
     with:
-      image_digest: ${{ needs.publish.outputs.digest }}
+      # By digest, so the server runs the exact image this run built and tested
+      # rather than whatever `latest` points at by the time it pulls.
+      image_digest: ${{ needs.build.outputs.digest }}
     secrets: inherit

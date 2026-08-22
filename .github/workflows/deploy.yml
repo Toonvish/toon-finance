@@ -26,13 +26,23 @@
 #   DEPLOY_SSH_KNOWN_HOSTS  output of `ssh-keyscan -p <port> <host>` — see the note below
 #   DEPLOY_SSH_PORT         optional, defaults to 22
 #
-# VARIABLE (not a secret — Settings -> Variables -> Actions):
+# VARIABLES (not secrets — Settings -> Variables -> Actions):
+#   DEPLOY_ENABLED          `true` — THE MASTER SWITCH, read by release.yml's job-level
+#                           `if`. A job-level condition cannot inspect the `secrets`
+#                           context, so this variable is the only way to ask "is a
+#                           server configured?". Leave it unset until all five secrets
+#                           above exist: otherwise every push to main starts this job
+#                           and fails it on the empty known_hosts below — a permanent
+#                           red X that says nothing about the cause.
 #   TOON_HOSTNAME           only for the clickable link on the deployment; the server
 #                           reads its own hostname from its .env
 #
-# There is no registry secret: the GHCR package is public (docs/deployment.md step 7).
-# If you keep it private, `docker login ghcr.io` once on the server instead — the
-# forced command cannot log in for you.
+# There is no registry secret, PROVIDED THE GHCR PACKAGE IS PUBLIC — and a freshly
+# published package is PRIVATE by default, which nothing here flips for you: GitHub ->
+# Packages -> toon-finance -> Package settings -> Change visibility -> Public. Keep it
+# private and you must `docker login ghcr.io` once on the server instead; the forced
+# command cannot log in for you. Both cases answer an anonymous pull with the same
+# bare `denied`, so check the visibility before suspecting the workflow.
 name: Deploy
 
 on:
