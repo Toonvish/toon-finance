@@ -1,21 +1,49 @@
 # Publishes the image to GHCR (docs/spec.md §5.1). ci.yml verifies the code;
 # THIS is the only workflow that ever pushes an image — a tag push is the
 # trigger, not a merge to main, so a release is always a deliberate act.
+#
+# BUILDS, THEN DEPLOYS. The deploy job is optional in practice: without the
+# DEPLOY_SSH_* secrets and the `production` environment it simply never runs,
+# and rolling out stays the manual `docker compose pull && docker compose up -d`
+# from the toon-edge README. The SSH key it uses is pinned to a forced command
+# on the server (docker/toon-deploy.sh, installed as `toon-finance-deploy`), so
+# it cannot open a shell there — see deploy.yml.
+#
+# `latest` COMES FROM docker/metadata-action's DEFAULT `flavor: latest=auto`,
+# which tags a semver tag push as `:latest`. That is why `TOON_IMAGE=…:latest`
+# in docker/env.example resolves at all — and why it only starts resolving
+# after the FIRST `v*.*.*` tag. A `workflow_dispatch` run off a tagless commit
+# produces no tags and therefore nothing to deploy; use it only from a tag.
 name: Release
 
 on:
   push:
     tags: ["v*.*.*"]
   workflow_dispatch:
+    inputs:
+      deploy:
+        description: "Nach dem Build auf den Server deployen"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
   packages: write
 
+concurrency:
+  # Never let two publishes race for the `latest` tag.
+  group: release
+  cancel-in-progress: false
+
 jobs:
   publish:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      # Consumed by the deploy job below, and printed for the human who wants to
+      # pin or roll back by hand.
+      digest: ${{ steps.build.outputs.digest }}
+      version: ${{ steps.meta.outputs.version }}
     steps:
       - uses: actions/checkout@v5
 
@@ -45,6 +73,7 @@ jobs:
       # linux/amd64 + linux/arm64 (Dockerfile.md's "BUILT FOR A SMALL 64-BIT
       # LINUX SERVER" — no 32-bit target, there is no Bun build for one).
       - name: Build and push
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -54,3 +83,17 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # Rolls the image THIS run produced onto the server. Pinned by DIGEST rather
+  # than by `:latest`, so what gets deployed is exactly what was just built even
+  # if another release lands in between.
+  deploy:
+    needs: publish
+    # A tag push deploys; a manual run only when explicitly asked.
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' && inputs.deploy)
+    uses: ./.github/workflows/deploy.yml
+    with:
+      image_digest: ${{ needs.publish.outputs.digest }}
+    secrets: inherit

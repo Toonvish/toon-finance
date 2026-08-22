@@ -47,9 +47,13 @@ Cent nicht stimmt und den niemand mehr rekonstruieren kann.
    werden nicht neu erfunden.
 6. **PWA + Offline-Erfassung**, vier Bausteine gemeinsam (siehe Gotchas). Doppelbuchung beim Replay ist
    hier ein falscher Saldo, kein falscher Einkaufszettel.
-7. **Docker single-origin + Caddy.** EIN Container; die API serviert die gebaute PWA über
-   `WEB_DIST_DIR`. `PUBLIC_API_URL=""` → relative URLs → **kein CORS-Eintrag im Bootstrap**. Caddy davor
-   terminiert nur TLS (ohne Secure Context registriert sich kein Service Worker, also keine PWA).
+7. **Docker single-origin + GETEILTER Caddy.** EIN Container; die API serviert die gebaute PWA über
+   `WEB_DIST_DIR`. `PUBLIC_API_URL=""` → relative URLs → **kein CORS-Eintrag im Bootstrap**. Der Caddy
+   davor terminiert nur TLS (ohne Secure Context registriert sich kein Service Worker, also keine PWA)
+   und **steht nicht mehr in diesem Repo**: er gehört zum `toon-edge`-Stack (`/opt/toon-edge`), der die
+   Ports 80/443 für alle toon-Apps auf dem Host hält und nach Hostnamen verteilt — zwei Stacks können
+   nicht beide `:443` binden. Dieser Stack hängt am externen Netz `toon-edge` unter dem Alias
+   **`finance-app`**; siehe die Compose-Falle unten. An der App selbst hat sich dadurch nichts geändert.
 8. **Stack**: Bun 1.4.0, Bun.serve + Hono, libSQL via `@libsql/client` + `drizzle-orm/libsql`,
    React 19 + Vite + TanStack Router (code-based, kein Codegen) + TanStack Query + Tailwind v4,
    TypeScript 7 strict, kein `baseUrl`, kein `any` in exportierten Signaturen.
@@ -275,115 +279,124 @@ Die ersten sechzehn sind aus `toon-recipe` übernommen (dort teuer gelernt, hier
 18. `clientIp()` glaubt `X-Forwarded-For` nur bei `TRUST_PROXY=1`; im Caddyfile bleibt
     `header_up X-Forwarded-For {remote_host}` stehen, obwohl Caddy es als „unnecessary" loggt — eine
     `trusted_proxies`-Zeile würde einen gefälschten Wert zum ersten Eintrag machen und jedes
-    Rate-Limit zum No-op.
-19. `GET /api/auth/sessions` gibt **Handles** heraus, nie die Session-Id: `logger()` schreibt
+    Rate-Limit zum No-op. **Der Caddyfile liegt jetzt im `toon-edge`-Repo**, als ein Snippet für alle
+    Apps — die Zeile schützt damit beide Apps auf einmal, und wer sie dort entfernt, öffnet zwei
+    Auth-Bruteforce-Lücken statt einer.
+19. **DER NETZWERK-ALIAS IN docker-compose.yml IST LOAD-BEARING.** `app` heißt in toon-recipe genauso
+    `app`, und Compose trägt den SERVICENAMEN als Alias in jedes Netz ein, dem ein Container beitritt
+    — im geteilten `toon-edge`-Netz hörten also zwei Container auf `app`, und der Proxy verteilte per
+    DNS-Round-Robin abwechselnd an die Finanz- und die Rezept-App. Der Fehler knallt NICHT: die Seite
+    lädt, nur jeder zweite Request kommt aus der falschen Anwendung. Deshalb `aliases: [finance-app]`,
+    und der Caddyfile spricht ausschließlich diesen Alias an. `mailpit` bleibt bewusst OFF dem
+    edge-Netz — sein UI zeigt jeden Passwort-Reset-Link.
+20. `GET /api/auth/sessions` gibt **Handles** heraus, nie die Session-Id: `logger()` schreibt
     `c.req.path`, ein 30-Tage-Token stünde sonst im Access-Log und wäre als Cookie wiederverwendbar.
-20. `/password/forgot` antwortet **204 für bekannte und unbekannte Adressen**, mit identischem Body und
+21. `/password/forgot` antwortet **204 für bekannte und unbekannte Adressen**, mit identischem Body und
     Timing; das Rate-Limit greift **vor** dem Lookup. Zwei Nutzer heißt nicht „kein
     Enumerationsrisiko" — es heißt, dass zwei Adressen die einzigen gültigen Ziele sind.
-21. Ein fehlgeschlagener Mailversand darf seine Aktion nie scheitern lassen (`trySendMail`, immer nach
+22. Ein fehlgeschlagener Mailversand darf seine Aktion nie scheitern lassen (`trySendMail`, immer nach
     dem Commit). Und **`delivered` allein ist nicht „eine Mail ging raus"** — der ConsoleMailer
     resolved auch. `mailDeliveryOf()` liefert `sent` / `not_configured` / `failed`, und die UI darf die
     letzten beiden nie als Erfolg rendern.
-22. Der Einladungstoken **ist** die Capability; die eingeladene E-Mail wird bewusst nicht erzwungen
+23. Der Einladungstoken **ist** die Capability; die eingeladene E-Mail wird bewusst nicht erzwungen
     (sonst kann man den Link nicht weiterleiten); `acceptInvite` ist idempotent. `invites.token` steht
     im Klartext, `password_reset_tokens.token_hash` nur als SHA-256 — *eine geleakte invites-Tabelle
     kostet eine Mitgliedschaft, eine geleakte reset-Tabelle jedes Konto.*
-23. `safeNextPath` muss Backslashes, Steuerzeichen und Leerzeichen ablehnen (`new URL("/\evil.com",
+24. `safeNextPath` muss Backslashes, Steuerzeichen und Leerzeichen ablehnen (`new URL("/\evil.com",
     origin)` ergibt `http://evil.com/`), und `RequireAuth` macht **höchstens einen Redirect pro Mount**
     (Ref + `safeNextPath`), sonst wächst `?next=` bis zur Kilobyte-URL.
-24. `translate()` ist **nur für Code außerhalb von React** (api-Fallbacks, Toasts aus Event-Handlern,
+25. `translate()` ist **nur für Code außerhalb von React** (api-Fallbacks, Toasts aus Event-Handlern,
     ErrorBoundary). In einer Komponente typecheckt es und rendert dort veraltete Copy — genau das macht
     es gefährlich.
-25. `"system"` ist die dritte Locale- und Theme-Präferenz und bedeutet **„Key aus localStorage
+26. `"system"` ist die dritte Locale- und Theme-Präferenz und bedeutet **„Key aus localStorage
     entfernen"**, nicht „aufgelösten Wert speichern". Die zwei Zustände zu kollabieren, zeigt jemandem
     „Deutsch" an, der nie etwas gewählt hat.
-26. Label-Maps, die zur Importzeit einfrieren, sind verboten. Wire-Wert `MINE_SPLIT`, Label über
+27. Label-Maps, die zur Importzeit einfrieren, sind verboten. Wire-Wert `MINE_SPLIT`, Label über
     `TX_KIND_LABEL_KEYS` — genau wie Nav-Items Keys tragen.
-27. Bun benutzt den **Isolated Linker** (seit 1.3; unter 1.4.0 verifiziert unverändert — der neue
+28. Bun benutzt den **Isolated Linker** (seit 1.3; unter 1.4.0 verifiziert unverändert — der neue
     opt-in Global Virtual Store ändert das Layout nicht, `node_modules/.bun/` enthält weiterhin echte
     Verzeichnisse ohne absolute Symlinks): die echten Pakete liegen unter `node_modules/.bun/`, jedes
     Workspace hat seinen eigenen Symlink-Baum. Ins Image müssen **drei** Pfade kopiert werden
     (`/app/node_modules`, `/app/apps/api/node_modules`, `/app/packages/shared/node_modules`), sonst
     baut und startet der Container und stirbt beim ersten Request mit
     `Cannot find module '@libsql/client'`.
-28. `sw.js` und `index.html` dürfen **nie** gecacht werden (sonst kann die App sich nie wieder selbst
+29. `sw.js` und `index.html` dürfen **nie** gecacht werden (sonst kann die App sich nie wieder selbst
     updaten); `.webmanifest` braucht `application/manifest+json` (`Bun.file().type` sagt
     `application/octet-stream`, und ein Manifest mit falschem Typ wird still ignoriert → keine PWA);
     eine fehlende Datei **mit Endung** muss ein echter 404 sein, kein SPA-Shell.
-29. `/app/data` ist ein VOLUME — alles, was zur Build-Zeit dorthin geschrieben wird, ist zur Laufzeit
+30. `/app/data` ist ein VOLUME — alles, was zur Build-Zeit dorthin geschrieben wird, ist zur Laufzeit
     unsichtbar. **Docker-Builds nie durch eine Pipe verifizieren** (`docker build … | tail` liefert den
     Exit-Code von `tail`).
-30. `apple-mobile-web-app-status-bar-style: black-translucent` ist verboten; `viewport-fit=cover` +
+31. `apple-mobile-web-app-status-bar-style: black-translucent` ist verboten; `viewport-fit=cover` +
     `<meta theme-color>` ist der Ersatz. Handy-Layout im echten Headless-Browser bei 390 px prüfen,
     nicht durch Lesen von Tailwind-Klassen.
 
 **Aus der Fachlogik dieses Repos**
 
-31. **`halfForOther(-101)` muss `-50` sein, nicht `-51`.** Der Restcent gehört dem Zahler, in **beiden**
+32. **`halfForOther(-101)` muss `-50` sein, nicht `-51`.** Der Restcent gehört dem Zahler, in **beiden**
     Vorzeichenrichtungen: `(cents - (cents % 2)) / 2` (JS `%` nimmt das Vorzeichen des Dividenden,
     trunkiert also zur Null). `Math.floor(-101/2)` ergibt `-51` und gäbe dem **Nicht**-Zahler den
     größeren Anteil einer Gutschrift, während der Zahler den größeren Anteil einer Kosten trägt — der
     Restcent würde mit dem Vorzeichen die Seite wechseln. In Tests aus nur positiven Beträgen ist das
     unsichtbar und zeigt sich später als Drift in einem Ledger mit 25 negativen Zeilen. Nie
     `Math.round(c/2)`, nie `~~(c/2)`, nie `c >> 1`.
-32. **Es wird pro Transaktion halbiert, nicht die Summe.** Das Blatt halbiert die Spaltensumme
+33. **Es wird pro Transaktion halbiert, nicht die Summe.** Das Blatt halbiert die Spaltensumme
     (`K14 = ROUND(K13/2,2)`); die App halbiert jede Zeile. Das ist ein Unterschied von 22 Cent auf dem
     importierten Bestand, und er wird vom Importer **ausgewiesen**, nicht wegjustiert. Pro Transaktion
     ist richtig: es ist, was der Nutzer auf jeder Zeile sieht, es ist reihenfolgeunabhängig, und es
     überlebt das Löschen einer einzelnen Zeile ohne Neuberechnung des ganzen Ledgers.
-33. **Im Fixkostenplan wird genau einmal gerundet, und nur der Anteil der anderen Person.** Der Anteil
+34. **Im Fixkostenplan wird genau einmal gerundet, und nur der Anteil der anderen Person.** Der Anteil
     des Zahlers ist per Definition das Komplement (`costTotal − other`), also trägt er jeden Restcent
     und die zwei angezeigten Zahlen summieren sich immer exakt auf. Wer `payerShare` über einen zweiten
     Rundungsaufruf rendert, bekommt `costTotal ± 1` auf dem Bildschirm, und der Nutzer sieht es. Die
     Quote geht als **Bruch** (`quoteNumerator/quoteDenominator`) auf die Leitung und wird nie als
     Zwischenfaktor benutzt.
-34. **Der Catch-up rechnet historisch und bucht nie die Zukunft.** Periode `2026-03` wird aus den
+35. **Der Catch-up rechnet historisch und bucht nie die Zukunft.** Periode `2026-03` wird aus den
     Positionen und Gehältern berechnet, die **in** März galten, auch wenn der Lauf im August passiert —
     dafür existieren die temporalen `active_from` / `valid_from`. `to` ist die aktuelle Periode,
     inklusive. Und `bookableCents === 0` schreibt **keine** Zeile.
-35. **Gebuchte Perioden sind unveränderlich.** Eine rückwirkende Gehaltsänderung rührt keine bereits
+36. **Gebuchte Perioden sind unveränderlich.** Eine rückwirkende Gehaltsänderung rührt keine bereits
     geschriebene Zeile an; sie erzeugt eine **Anpassungsbuchung** mit `external_key =
     fixedplan-adj:{hh}:{p}:{bookedCents}` — der superseded Betrag steckt im Key, damit eine zweite
     Korrektur eine zweite Anpassung erzeugt, während ein Wiederholungslauf gegen unveränderte Daten
     kollidiert und nichts tut. Grund: die beiden gleichen gegen einen Saldo aus, den **beide gesehen
     haben**. Verschöbe eine rückwirkende Änderung einen vergangenen Monat, würde die bereits geleistete
     Zahlung still nicht mehr passen.
-36. **`expectedBalanceCents` ist bei `POST …/settlements` Pflicht.** Passt es nicht mehr — die andere
+37. **`expectedBalanceCents` ist bei `POST …/settlements` Pflicht.** Passt es nicht mehr — die andere
     Person hat vor dreißig Sekunden gebucht —, ist die Antwort `409 balance_stale` mit dem aktuellen
     Wert, und der Client fragt neu. Gegen eine Zahl auszugleichen, die man nicht gesehen hat, ist das
     einzige Rennen in dieser App, das echtes Geld kostet. Über- und Teilzahlung sind **erlaubt** und
     werden benannt, nicht geklemmt.
-37. **`origin` ist die Trennlinie zwischen App und Mensch.** Die Neuberechnung findet ihre Zeilen über
+38. **`origin` ist die Trennlinie zwischen App und Mensch.** Die Neuberechnung findet ihre Zeilen über
     `(household_id, origin, plan_period)` — eine manuelle Zeile kommt in keiner dieser WHERE-Klauseln
     vor und kann von keiner Plan-Operation getroffen werden. Umgekehrt sind `PATCH`/`DELETE` auf
     `origin ≠ 'manual'` `409 transaction_generated`. `origin` hat **keinen** Drizzle-Default, damit
     `tsc` an jeder Insert-Stelle scheitert, die sie vergisst.
-38. **Der Saldo hat eine Konvention, und die UI zeigt nie ein rohes Vorzeichen.** `balanceCents > 0`
+39. **Der Saldo hat eine Konvention, und die UI zeigt nie ein rohes Vorzeichen.** `balanceCents > 0`
     heißt „Slot 2 schuldet Slot 1"; die Web-App negiert für einen Betrachter aus Slot 2 und rendert
     einen von drei Katalogschlüsseln. Drei Schlüssel, nicht drei fest verdrahtete Sätze.
-39. **`SETTLEMENT` und `OTHER_ONLY` rechnen identisch** und unterscheiden sich nur im Bericht:
+40. **`SETTLEMENT` und `OTHER_ONLY` rechnen identisch** und unterscheiden sich nur im Bericht:
     `isExpense(tx) = tx.splitMode !== 'SETTLEMENT'`. Ausgleichszahlungen sind aus Kategoriesummen, aus
     Monatsausgaben und aus „wie viel haben wir für Tiere ausgegeben" **ausgeschlossen** — sie sind
     Schuldenbewegung, kein Verbrauch. Das ist **eine** exportierte Prädikatsfunktion, kein Ad-hoc-Filter
     an jeder Aufrufstelle.
-40. **Excels `SUM` überspringt Textzellen.** `H79` steht als Zeichenkette `"31,47"` im Blatt, weil
+41. **Excels `SUM` überspringt Textzellen.** `H79` steht als Zeichenkette `"31,47"` im Blatt, weil
     jemand ein deutsches Dezimalkomma getippt hat — 31,47 € sind seit April 2025 unsichtbar. Der
     Importer holt sie per Default zurück; der importierte Saldo liegt damit **31,47 € über `K21`**, und
     diese Zeile ist im Report **benannt und beziffert**, niemals in einer Toleranz versteckt. Die
     Rundungs-Toleranz gilt nur für den `--excel-text-quirk`-Vergleich und liegt bei 25 Cent.
-41. **Der Server schreibt Text in Datenzeilen in `households.defaultLocale`, nie in
+42. **Der Server schreibt Text in Datenzeilen in `households.defaultLocale`, nie in
     `requestLocale(c)`.** Sonst schreibt ein Lauf mit englischer UI dauerhaft einen englischen Satz in
     einen deutschen Datensatz. Betroffen sind genau zwei Keys: `plan.bookingDescription` und
     `plan.adjustmentDescription`. Und: **ein gespeicherter Wert wird beim Lesen nie neu übersetzt** —
     ein Kategorielabel ist UI-Copy, bis der Nutzer es umbenennt, und danach Inhalt.
-42. **Ops-Ausgabe ist immer Englisch und geht nie durch den Katalog**: `console.*`, die
+43. **Ops-Ausgabe ist immer Englisch und geht nie durch den Katalog**: `console.*`, die
     env-Validierung beim Boot, alle CLI-Skripte, `Error.message`, die `accrual_runs.error`-Spalte.
     *Eine Sprache in einem Log ist ein Feature.*
 
 **Aus dem Review gelernt (Fachlogik + Architektur, siehe git log für die Fixes)**
 
-43. **„Diffe gegen den gebuchten Betrag" heißt: gegen den EFFEKTIVEN, nicht den ursprünglichen
+44. **„Diffe gegen den gebuchten Betrag" heißt: gegen den EFFEKTIVEN, nicht den ursprünglichen
     `fixed_plan`-Betrag.** `recalculatePlan` muss jede bereits existierende
     `fixed_plan_adjustment`-Zeile derselben Periode aufaddieren, bevor es den Delta gegen
     `computePlanForPeriod` bildet. Sonst produziert eine ZWEITE Gehaltskorrektur denselben
@@ -391,7 +404,7 @@ Die ersten sechzehn sind aus `toon-recipe` übernommen (dort teuer gelernt, hier
     verschluckt sie lautlos, und die Antwort lügt: `applied: true`, `adjustments: []`. Test: zwei
     Korrekturen hintereinander, nicht nur eine (`apps/api/test/plan.test.ts`, „a SECOND retroactive
     correction").
-44. **`lastBookedPeriod` darf nie über eine Periode hinweg vorrücken, die aus Datenmangel übersprungen
+45. **`lastBookedPeriod` darf nie über eine Periode hinweg vorrücken, die aus Datenmangel übersprungen
     wurde.** Wird sie nur bei jeder ERFOLGREICH gebuchten Periode gesetzt (statt beim ersten
     `plan_incomplete`-Skip einzufrieren), springt sie über die Lücke, sobald eine SPÄTERE Periode wieder
     bebuchbar ist — und `catchUpRange` startet danach immer NACH `lastBookedPeriod`. Die Lücke ist dann
@@ -399,7 +412,7 @@ Die ersten sechzehn sind aus `toon-recipe` übernommen (dort teuer gelernt, hier
     API-Weg zurück. Die Reparatur: `lastBooked` nur vorrücken, solange in DIESEM Lauf noch kein
     `plan_incomplete`-Skip vorkam („Datenlücke" ≠ „schon anderswo gebucht" ≠ „Anteil ist zufällig 0" —
     nur Ersteres darf einfrieren).
-45. **Ein `externalKey`-Namensraum-Unterschied (`fixedplan:*` vs. `xlsx:rent:*`) verhindert KEINE
+46. **Ein `externalKey`-Namensraum-Unterschied (`fixedplan:*` vs. `xlsx:rent:*`) verhindert KEINE
     Doppelbuchung derselben Periode** — der Unique-Index ist `(household_id, external_key)`, und zwei
     verschiedene Strings für denselben Monat kollidieren dort nie. Der Catch-up-Loop UND `PATCH
     …/plan { startPeriod }` müssen deshalb explizit auf `(household_id, plan_period)` prüfen, egal
@@ -408,14 +421,14 @@ Die ersten sechzehn sind aus `toon-recipe` übernommen (dort teuer gelernt, hier
     Haushaltsanlage), seine importierte Mietserie ein zweites Mal. `plan_period_locked` (409) existierte
     als Fehlercode und Katalogschlüssel bereits, wurde aber nirgends geworfen — der tote Code WAR die
     fehlende Absicherung.
-46. **Eine Idempotenzprüfung, die einen zusammengesetzten Unique-Index nachbildet, muss auf ALLEN seinen
+47. **Eine Idempotenzprüfung, die einen zusammengesetzten Unique-Index nachbildet, muss auf ALLEN seinen
     Spalten filtern, nicht nur der auffälligsten.** `transactions_household_external_key_uidx` ist
     `(household_id, external_key)`; `scripts/import-xlsx.ts`s Vorab-`SELECT` filterte nur auf
     `external_key`. In einer DB mit zwei Haushalten (Demo-Seed neben dem echten, oder ein zweiter
     echter Import) sieht die Prüfung die Zeilen des ERSTEN Haushalts unter denselben `xlsx:*`-Keys,
     meldet „N already present (idempotent re-run)" und schreibt für den zweiten Haushalt nichts — bei
     vollem Erfolgs-Output.
-47. **Eine Zod-`.refine()` kann keinen eigenen Fehlercode auf die Leitung bringen.** Jeder
+48. **Eine Zod-`.refine()` kann keinen eigenen Fehlercode auf die Leitung bringen.** Jeder
     `ZodError` wird zu `422 validation_failed` (`lib/errors.ts`s `toApiError`) — der spezifische
     Refinement-Key landet nur in `details[].i18n.key`, nie in `error.code`. Ein dokumentierter,
     dedizierter Code wie `transaction_amount_zero` muss deshalb als expliziter `throw new
@@ -423,7 +436,7 @@ Die ersten sechzehn sind aus `toon-recipe` übernommen (dort teuer gelernt, hier
     Wire-Contract einen Code, den kein Client je in `error.code` sieht (CLAUDE.md's eigene Regel „auf
     `code` branchen, nie auf `message`" wird damit für genau diesen Fall unmöglich einzuhalten).
     `settlements.service.ts`s `settlement_amount_invalid`-Check macht es bereits richtig vor.
-48. **`R8` ist keine Betragszelle — ihr Wert ist die SUMME, ihre `formula` sind die sechs einzelnen
+49. **`R8` ist keine Betragszelle — ihr Wert ist die SUMME, ihre `formula` sind die sechs einzelnen
     Beträge.** `"950+150+55.00+22.50+5.00+5.00"` als Text, nicht sechs Zellen. Wer nur den
     gecachten `value` liest (wie jede andere Betragszelle im Blatt), bekommt `118750` ct total und
     verliert die sechs Einzelpositionen, aus denen `fixed_cost_items` bestehen muss — der Importer
@@ -431,7 +444,7 @@ Die ersten sechzehn sind aus `toon-recipe` übernommen (dort teuer gelernt, hier
     `fixed_cost_items`/`incomes`, `startPeriod` nie über den Default hinaus bewegt), obwohl die Zahlen
     die ganze Zeit im Blatt standen. `parseFixedCostFormulaCents` spaltet die Formel selbst, nicht den
     Cache.
-49. **`PUBLIC_API_URL` MUSS leer sein — auch in der Entwicklung —, und ein absoluter Wert dort täuscht
+50. **`PUBLIC_API_URL` MUSS leer sein — auch in der Entwicklung —, und ein absoluter Wert dort täuscht
     einen Serverausfall vor.** Die App hat GENAU EINE Origin: im Container serviert die API die
     gebaute PWA (`WEB_DIST_DIR`), in der Entwicklung leitet Vites `server.proxy` `/api` an den
     API-Port weiter. Genau deshalb montiert `apps/api/src/index.ts` **kein `cors()`** (Entscheidung
@@ -449,7 +462,7 @@ Die ersten sechzehn sind aus `toon-recipe` übernommen (dort teuer gelernt, hier
 
 **Aus dem zweiten Review (Code-Review über die ganze Codebase)**
 
-50. **Drizzle verpackt JEDEN Query-Fehler in einen `DrizzleQueryError`; die echte Meldung steht in
+51. **Drizzle verpackt JEDEN Query-Fehler in einen `DrizzleQueryError`; die echte Meldung steht in
     `cause`.** `error.message` ist nur `Failed query: insert into "incomes" …`, `error.code` ist
     `undefined`, und `SQLITE_CONSTRAINT: UNIQUE constraint failed: …` liegt eine Ebene tiefer.
     `isUniqueViolation` prüfte nur die oberste Ebene und lieferte damit für **jede** Unique-Verletzung
@@ -460,14 +473,14 @@ Die ersten sechzehn sind aus `toon-recipe` übernommen (dort teuer gelernt, hier
     Register-Route die Adresse **vorher** nachschlägt und ihren eigenen catch nie erreicht. Die
     Funktion läuft jetzt die `cause`-Kette entlang (tiefenbegrenzt). Wer eine Treiber-Fehlerform
     prüft, prüft die Kette, nie nur die Spitze.
-51. **Query-Keys, die hierarchisch AUSSEHEN, sind es nicht.** TanStack matcht Präfixe pro
+52. **Query-Keys, die hierarchisch AUSSEHEN, sind es nicht.** TanStack matcht Präfixe pro
     Array-**Element**: `["toon","household",hh,"transactions"]` trifft
     `…,"transaction-summary",…` nicht, und `…,"balance"` trifft `…,"balance-history",…` nicht.
     `invalidateAfterLedgerMutation` listete beide Nachbarn nicht auf — die Dashboard-Karten und der
     Saldo-Verlauf zeigten nach jeder Buchung bis zu 30 s alte Zahlen, während der eigene Docstring
     der Funktion behauptete, die Summary sei dabei. Ein vergessener Key wirft nichts; er zeigt
     ruhig die Zahl von gestern. `apps/web/src/lib/queries.test.ts` pinnt den Fan-out.
-52. **Eine optimistische Löschung braucht ein `onError`, eine optimistische Anlage einen Filter.**
+53. **Eine optimistische Löschung braucht ein `onError`, eine optimistische Anlage einen Filter.**
     Die DELETE-Mutation entfernte die Zeile in `onMutate` und stellte sie nie wieder her — bei
     `409 transaction_generated` (Plan-Zeilen sind nicht löschbar, und `shouldRetry` wiederholt keinen
     4xx) blieb sie aus der UI verschwunden, obwohl sie serverseitig existiert. Umgekehrt schrieb
@@ -476,20 +489,20 @@ Die ersten sechzehn sind aus `toon-recipe` übernommen (dort teuer gelernt, hier
     die Mutation, also korrigiert das niemand. Einfügen ist jetzt auf die ungefilterte erste Seite
     beschränkt, Entfernen bleibt bewusst breit. Und ein DELETE räumt den Detail-Cache per
     `removeQueries` ab, sonst rendert `/transactions/$id` die gelöschte Zeile weiter.
-53. **Eine Periode mit Anteil 0 schreibt keine Zeile, rückt `lastBookedPeriod` aber trotzdem vor.**
+54. **Eine Periode mit Anteil 0 schreibt keine Zeile, rückt `lastBookedPeriod` aber trotzdem vor.**
     Damit war sie für beide Wege unsichtbar: der Catch-up startet nach `lastBookedPeriod`, und
     `recalculatePlan` iterierte über `fixed_plan`-**Zeilen**. Eine spätere Gehaltskorrektur, die den
     Anteil von 0 auf einen echten Betrag hebt, war endgültig verloren — ohne API-Weg zurück.
     Die Kandidatenmenge ist jetzt „alle Perioden mit Plan-Zeile ∪ `[startPeriod, lastBookedPeriod]`",
     und eine Periode ohne Plan-Zeile diffed gegen 0. Perioden, die einer **fremden** Herkunft
     gehören (xlsx-Miete, manuell), bleiben ausgenommen — sonst bucht die Korrektur auf den Import obendrauf.
-54. **Ein angenommener Einladungstoken muss aufhören, eine Capability zu sein.**
+55. **Ein angenommener Einladungstoken muss aufhören, eine Capability zu sein.**
     `loadRedeemableInvite` prüfte `revoked` und Ablauf, aber nie `accepted`. Sobald die zweite Person
     wieder austritt (`removeMember` gibt den Slot frei), setzte derselbe — noch nicht abgelaufene —
     Link eine **beliebige** dritte Person in den Haushalt. Jetzt ist ein angenommener Token nur noch
     für genau das Konto einlösbar, das ihn angenommen hat (`redeemerId`); das hält `acceptInvite`
     idempotent und macht den Link für alle anderen zu `404 invite_invalid`.
-55. **Die Zeilenreihenfolge im Blatt ist NICHT chronologisch — nicht einmal auf Monatsebene.**
+56. **Die Zeilenreihenfolge im Blatt ist NICHT chronologisch — nicht einmal auf Monatsebene.**
     Spalte A Zeilen 18/20/28 sind `Obi 02.10`, `Obi 30.09`, `Lutz 29.09`. Ein „offensichtlicher" Fix
     gegen invertierte Datumsauflösung (monotone Untergrenze pro Bracket) wurde gegen den echten
     Korpus gemessen und schob `Obi 30.09` auf 2022-09-30, mit Jahresversatz für die 18 Zeilen darunter
@@ -520,10 +533,13 @@ Test fängt:
 
 ```bash
 docker build -t toon-finance:local . > /tmp/build.log 2>&1; echo $?   # NICHT durch eine Pipe
+docker network create toon-edge 2>/dev/null || true                   # der Stack braucht es
 docker compose --env-file .env.local-stack -p toonfin up -d
 ```
 
-`.env.local-stack` braucht `TOON_TLS_ISSUER=internal` **und** `TOON_HSTS_MAX_AGE=0` — mit dem
-`acme`-Default bekommt ein interner Name nie ein Zertifikat, und ein gepinnter HSTS auf einem internen
-Namen sperrt aus. Ein selbstsigniertes Zertifikat allein ergibt trotzdem **keine** PWA: ein Origin mit
+**Ein lokaler Stack braucht jetzt auch den edge-Proxy**, sonst terminiert nichts TLS und es gibt keine
+Seite zu sehen: toon-edge daneben auschecken, in dessen `.env` `FINANCE_HOSTNAME` setzen und
+`TOON_TLS_ISSUER=internal` **und** `TOON_HSTS_MAX_AGE=0` DORT eintragen — mit dem `acme`-Default
+bekommt ein interner Name nie ein Zertifikat, und ein gepinnter HSTS auf einem internen Namen sperrt
+aus. In `.env.local-stack` dieses Repos stehen diese beiden Werte nicht mehr. Ein selbstsigniertes Zertifikat allein ergibt trotzdem **keine** PWA: ein Origin mit
 nicht vertrauter CA ist auch nach dem Wegklicken kein Secure Context.

@@ -7,10 +7,24 @@
 # For the default setup — a small VPS with a domain — only TOON_HOSTNAME,
 # SESSION_SECRET and the mail relay need a value.
 #
-# THREE SERVICES, AND NO API KEY REQUIRED BETWEEN THEM:
+# TWO SERVICES, AND NO API KEY REQUIRED BETWEEN THEM:
 #   app      the API + the PWA, one origin, one port (see Dockerfile)
-#   caddy    TLS termination, so the PWA gets the secure context it needs
 #   mailpit  a local SMTP sink + a web UI, used until a real relay is configured
+#
+# TLS TERMINATION IS NOT IN THIS FILE ANY MORE. It moved to the `toon-edge` stack
+# (/opt/toon-edge), a single shared Caddy that owns ports 80/443 for every toon app
+# on the host and routes by hostname. This stack used to ship its own Caddy, which
+# works for exactly one app per machine: with toon-recipe already running, this
+# stack's `docker compose up -d` died with "port is already allocated". Nothing
+# about the app changed — it still serves its own `/` on its own hostname; only
+# the proxy is shared.
+#
+# THIS STACK THEREFORE NEEDS THE SHARED NETWORK TO EXIST FIRST:
+#
+#     docker network create toon-edge     # once per machine
+#
+# and `TOON_TLS_ISSUER` / `TOON_HSTS_MAX_AGE` now live in /opt/toon-edge/.env,
+# not here. See the toon-edge README for the full runbook.
 #
 # Mail is the one thing with a choice to make: out of the box `app` talks SMTP
 # to `mailpit` over the private compose network, which COLLECTS mail and
@@ -75,7 +89,18 @@ services:
     expose:
       - "3001"
     networks:
-      - toon
+      # `toon` is the PRIVATE network of this project and carries exactly one hop:
+      # app -> mailpit. Mailpit is deliberately NOT on the shared edge network.
+      toon:
+      # `finance-app` IS LOAD-BEARING, not decoration. toon-recipe also calls its
+      # service `app`, and compose registers the SERVICE NAME as an alias on every
+      # network a container joins — so on the shared edge network two containers
+      # would answer to `app` and Caddy would round-robin between the finance and
+      # the recipe app. It fails silently: the page loads, every other request
+      # comes from the wrong application. The alias is what the Caddyfile targets.
+      edge:
+        aliases:
+          - finance-app
     # Bun, a libSQL file and the static PWA — a few hundred MB is plenty, and a
     # limit below the machine's RAM is what keeps a runaway request from taking
     # the Docker daemon with it.
@@ -85,34 +110,6 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-
-  caddy:
-    # Pinned rather than `2-alpine`: a floating tag means `docker compose pull`
-    # can change the TLS terminator underneath a running install, and the
-    # symptom of a bad Caddy release is "the whole site is gone", on a machine
-    # you reach over that same site. Bump deliberately.
-    image: caddy:2.11.4-alpine
-    restart: unless-stopped
-    environment:
-      TOON_HOSTNAME: ${TOON_HOSTNAME:?TOON_HOSTNAME is missing - see docker/env.example}
-      # `acme` (default) = a real Let's Encrypt certificate, needs a public
-      # hostname and ports 80/443. `internal` = Caddy's local CA for a LAN box
-      # or a local test, and then TOON_HSTS_MAX_AGE=0 belongs with it.
-      TOON_TLS_ISSUER: ${TOON_TLS_ISSUER:-acme}
-      TOON_HSTS_MAX_AGE: ${TOON_HSTS_MAX_AGE:-31536000}
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
-      # caddy-data holds the ACME account and certificates — and in `internal`
-      # mode the local CA INCLUDING ITS PRIVATE KEY. Keep it out of any backup
-      # you would share.
-      - caddy-data:/data
-      - caddy-config:/config
-    networks:
-      - toon
-    logging: *logging
 
   mailpit:
     # Pinned for the same reason as Caddy.
@@ -142,11 +139,21 @@ services:
     logging: *logging
 
 networks:
+  # Private to this compose project: only app and mailpit are on it.
   toon:
     driver: bridge
+  # EXTERNAL, and created by hand once (`docker network create toon-edge`). It is
+  # shared with the toon-edge proxy and every other toon app on the host, so it
+  # belongs to none of them: that way `docker compose down` here never tries to
+  # tear down a network the other stacks are still using. ONLY `app` joins it —
+  # mailpit stays off the shared network, so the other app cannot reach the UI
+  # that shows every password-reset and invite link.
+  edge:
+    external: true
+    name: toon-edge
 
 volumes:
+  # The database. THIS is the volume to back up. caddy-data/caddy-config are gone
+  # from this stack; the certificates live in the toon-edge project now.
   toon-data:
-  caddy-data:
-  caddy-config:
   mailpit-data:
