@@ -2,7 +2,7 @@ import { forwardRef, useId, useState, type InputHTMLAttributes, type ReactNode }
 import { Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/I18nProvider.tsx";
-import { Label } from "./Label";
+import { Label, type LabelVariant } from "./Label";
 
 /**
  * Shared by Input, Select, Textarea and AmountInput ([WEB-TX]).
@@ -24,6 +24,8 @@ export const controlClasses =
 
 export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "size"> {
   label?: ReactNode;
+  /** Style of the visible label — `caption` for the capture form's upper-case group captions. */
+  labelVariant?: LabelVariant;
   hint?: ReactNode;
   error?: string | undefined;
   optional?: boolean;
@@ -39,6 +41,7 @@ export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   {
     label,
+    labelVariant,
     hint,
     error,
     optional,
@@ -60,7 +63,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   return (
     <div className={cn("flex flex-col gap-1.5", containerClassName)}>
       {label ? (
-        <Label htmlFor={id} required={required} optional={optional}>
+        <Label htmlFor={id} required={required} optional={optional} variant={labelVariant}>
           {label}
         </Label>
       ) : null}

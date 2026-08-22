@@ -26,6 +26,7 @@ import { KindPicker } from "./KindPicker";
 import { TagInput } from "./TagInput";
 import { Chip } from "@/components/ui/Chip";
 import { Input } from "@/components/ui/Input";
+import { captionClasses } from "@/components/ui/Label";
 import { DEFAULT_TX_KIND } from "../lib/kinds";
 import { useCategoriesForPicker } from "../lib/queries";
 
@@ -182,9 +183,16 @@ export function TransactionFormFields({ householdId, otherName, value, onChange,
         otherName={otherName}
       />
 
+      {/*
+        A VISIBLE label, not just `aria-label`: every other group in this form
+        carries one (Betrag, Art, Datum, Kategorie), the placeholder vanishes
+        as soon as a character is typed, and the required marker is the only
+        thing that says so before the submit fails.
+      */}
       <Input
         id={descriptionId}
-        aria-label={t("transactions.form.description")}
+        label={t("transactions.form.description")}
+        labelVariant="caption"
         placeholder={t("transactions.form.descriptionPlaceholder")}
         value={value.description}
         error={errors.description}
@@ -193,7 +201,7 @@ export function TransactionFormFields({ householdId, otherName, value, onChange,
       />
 
       <div className="flex flex-col gap-2">
-        <span className="text-xs font-semibold tracking-wide text-fg-subtle uppercase">
+        <span className={captionClasses}>
           {t("transactions.form.date")}
         </span>
         <div className="flex flex-wrap gap-2">
@@ -220,7 +228,7 @@ export function TransactionFormFields({ householdId, otherName, value, onChange,
       </div>
 
       <div className="flex flex-col gap-2">
-        <span className="text-xs font-semibold tracking-wide text-fg-subtle uppercase">
+        <span className={captionClasses}>
           {t("transactions.form.category")}
         </span>
         <div className="flex flex-wrap gap-2">

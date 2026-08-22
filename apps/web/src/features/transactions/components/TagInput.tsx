@@ -52,7 +52,10 @@ export function TagInput({ householdId, value, onChange }: TagInputProps) {
 
   return (
     <div className="flex flex-col gap-2">
-      <Label optional>{t("transactions.form.tags")}</Label>
+      {/* `caption`, like every other group in this form — Betrag, Art, Beschreibung, Datum, Kategorie. */}
+      <Label variant="caption" optional>
+        {t("transactions.form.tags")}
+      </Label>
 
       {value.length > 0 ? (
         <ul className="flex flex-wrap gap-1.5">

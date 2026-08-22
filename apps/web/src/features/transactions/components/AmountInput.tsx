@@ -20,6 +20,7 @@ import { useId, useState } from "react";
 import { parseGermanAmount } from "@toon/shared";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/I18nProvider.tsx";
+import { Label } from "@/components/ui/Label";
 import { Switch } from "@/components/ui/Switch";
 
 export interface AmountInputProps {
@@ -90,9 +91,9 @@ export function AmountInput({ valueCents, onChange, error, id: idProp, autoFocus
             error ? "border-danger" : "border-line",
           )}
         >
-          <label htmlFor={id} className="shrink-0 text-xs font-semibold tracking-wide text-fg-subtle uppercase">
+          <Label htmlFor={id} variant="caption" required className="shrink-0">
             {t("transactions.form.amount")}
-          </label>
+          </Label>
           <input
             id={id}
             inputMode="decimal"

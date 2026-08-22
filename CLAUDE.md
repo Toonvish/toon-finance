@@ -560,6 +560,33 @@ Die ersten sechzehn sind aus `toon-recipe` übernommen (dort teuer gelernt, hier
     nackte Anteilszahl rechts unter dem Betrag, mit dem Satz auf `aria-label`; ab `sm` steht er
     ausgeschrieben in der Meta-Zeile. Gemessen im Headless-Browser, nicht geschätzt (Gotcha 31).
 
+**Aus dem Review des Redesigns**
+
+62. **„Ist das Blatt offen?" ist nicht „hat das Blatt ungespeicherte Arbeit?".** `QuickAddDialog`
+    behielt seinen Formularzustand über Schließen/Öffnen hinweg — genau so gewollt, ein Fehlgriff
+    darf keinen getippten Betrag kosten — meldete den `useUnsavedWork`-Claim aber als
+    `isOpen && form.isDirty` an. Ein geschlossenes Blatt mit getipptem Betrag gab den Claim also
+    frei, `applyUpdate()` sah eine saubere Oberfläche, lud das Dokument neu, und der Betrag war weg.
+    Der Claim gehört an den Zustand, nie an dessen Sichtbarkeit: `useUnsavedWork(form.isDirty)`,
+    wie `/new` es von Anfang an tat.
+63. **Ein einmaliger Autofokus verliert gegen Inhalt, der später ankommt.** `Dialog`s Fokus-Effekt
+    hing an `[open]`. Öffnet das Erfassen-Blatt, während `useOtherMember()` noch lädt, steht dort ein
+    `LoadingBlock` ohne `[data-autofocus]` — der Effekt nahm das Panel und lief nie wieder, auch nicht,
+    als das Betragsfeld mountete. Der Effekt läuft jetzt nach JEDEM Render, mit zwei Refs, die ihn
+    höchstens zweimal handeln lassen (einmal Fallback, einmal beim Erscheinen des echten Ziels) —
+    sonst stiehlt er den Fokus jemandem, der schon tippt.
+64. **Ein Trenner wird ZWISCHEN Teile gesetzt, nie an einen Teil angehängt.** `TransactionRow` schrieb
+    das „·" direkt hinter das geschätzte Datum, in der Annahme, dass die Kategorie folgt. Auf 390 px
+    ohne Kategorie folgte nichts (alles Weitere ist `sm`-only) und die Zeile endete auf
+    `~ 21.08.2026 ·` — genau der einsame Interpunkt, den der eigene Kommentar der Komponente
+    verbietet. Die Teile werden jetzt als LISTE gesammelt und beim Rendern verfugt.
+65. **Zwei Rahmen, EIN Formular-Hook — aber zwei Zustände.** `/new` und das globale Blatt teilen sich
+    `useCreateTransactionForm`; jeder Rahmen hält trotzdem seine eigene INSTANZ davon. Der „+", die
+    Sidebar-Taste und `n` legten deshalb auf `/new` einen zweiten, unabhängigen Entwurf über den
+    gerade getippten: zwei Beträge, zwei „Buchen", und keine Anzeige, welcher abgeschickt wird. `/new`
+    meldet sich über `useQuickAddHostedHere()` als Host an, und alle drei Auslöser treten zurück.
+    *Geteilter Code heißt nicht geteilter Zustand.*
+
 ## Verifikations-Gates
 
 Alle vier müssen sauber sein, bevor irgendetwas „fertig" heißt:

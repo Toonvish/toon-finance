@@ -34,17 +34,22 @@ export function SideNav() {
         </span>
       </Link>
 
-      <Button
-        fullWidth
-        onClick={quickAdd.open}
-        aria-keyshortcuts="n"
-        leftIcon={<Plus className="size-4" strokeWidth={2.4} aria-hidden="true" />}
-      >
-        {t("nav.create")}
-        <kbd aria-hidden="true" className="ml-1 text-xs font-medium text-brand-fg/65">
-          N
-        </kbd>
-      </Button>
+      {/* Hidden on the screen that already IS the capture form (`/new`) —
+          opening the sheet there would lay a second, independent draft over
+          the one being typed into (see `lib/quick-add.tsx`). */}
+      {quickAdd.isAvailable ? (
+        <Button
+          fullWidth
+          onClick={quickAdd.open}
+          aria-keyshortcuts="n"
+          leftIcon={<Plus className="size-4" strokeWidth={2.4} aria-hidden="true" />}
+        >
+          {t("nav.create")}
+          <kbd aria-hidden="true" className="ml-1 text-xs font-medium text-brand-fg/65">
+            N
+          </kbd>
+        </Button>
+      ) : null}
 
       <nav aria-label={t("nav.overview")} className="flex-1">
         <ul className="flex flex-col gap-1">

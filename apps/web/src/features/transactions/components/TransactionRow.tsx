@@ -16,7 +16,7 @@
  * once behind `sm:hidden` (docs/spec.md §5.2 task brief) — a compact single
  * line on a phone, an extra tag column from `sm` up.
  */
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { Receipt } from "lucide-react";
 import type { TransactionResponse } from "@toon/shared";
 import { projectKind } from "@toon/shared";
@@ -66,6 +66,12 @@ export function TransactionRow({ transaction, viewerId, categoryLabel, onOpen, a
    * ONE line, never wrapped: the pieces are separated by "·", and a wrapped
    * separator strands a lone interpunct at the end of a line.
    *
+   * They are therefore collected as a LIST and the separator is inserted
+   * BETWEEN them — never appended to a piece in the hope that something
+   * follows it. Appending is what produced a dangling "~ 21.08.2026 ·" on a
+   * phone: the estimated date wrote its own separator, the category was
+   * absent, and everything that would have come next is `sm`-only.
+   *
    * The own share only joins this line from `sm` up. On a 390px phone the
    * category, "Dein Anteil 13,50 €", the amount and the overflow trigger do
    * not all fit, and what gave way was the CATEGORY — truncated to
@@ -73,34 +79,46 @@ export function TransactionRow({ transaction, viewerId, categoryLabel, onOpen, a
    * (it is how anyone finds the row again). Below `sm` the share therefore
    * moves under the amount, in the right-hand column where it lines up.
    */
-  const meta: ReactNode = (
-    <span className="flex min-w-0 items-center gap-x-1.5 overflow-hidden text-xs whitespace-nowrap text-fg-muted">
-      {estimated ? (
-        <>
-          <span title={t("transactions.dateEstimated")}>~ {formatDate(transaction.bookedAt)}</span>
-          <span aria-hidden="true">·</span>
-        </>
-      ) : null}
-      {categoryLabel ? <span className="truncate">{categoryLabel}</span> : null}
-      {isWide ? (
-        <>
-          {categoryLabel ? <span aria-hidden="true">·</span> : null}
-          <span>{shareText}</span>
-          {tagNames.length > 0 ? (
-            <>
-              <span aria-hidden="true">·</span>
-              {tagNames.map((name) => (
-                <span key={name} className="rounded-full bg-surface-2 px-1.5 py-0.5">
-                  {name}
-                </span>
-              ))}
-              {extraTagCount > 0 ? <span>+{extraTagCount}</span> : null}
-            </>
-          ) : null}
-        </>
-      ) : null}
-    </span>
-  );
+  const metaParts: { key: string; node: ReactNode }[] = [];
+  if (estimated) {
+    metaParts.push({
+      key: "date",
+      node: <span title={t("transactions.dateEstimated")}>~ {formatDate(transaction.bookedAt)}</span>,
+    });
+  }
+  if (categoryLabel) {
+    metaParts.push({ key: "category", node: <span className="truncate">{categoryLabel}</span> });
+  }
+  if (isWide) {
+    metaParts.push({ key: "share", node: <span>{shareText}</span> });
+    if (tagNames.length > 0) {
+      metaParts.push({
+        key: "tags",
+        node: (
+          <span className="flex items-center gap-x-1.5">
+            {tagNames.map((name) => (
+              <span key={name} className="rounded-full bg-surface-2 px-1.5 py-0.5">
+                {name}
+              </span>
+            ))}
+            {extraTagCount > 0 ? <span>+{extraTagCount}</span> : null}
+          </span>
+        ),
+      });
+    }
+  }
+
+  const meta: ReactNode =
+    metaParts.length > 0 ? (
+      <span className="flex min-w-0 items-center gap-x-1.5 overflow-hidden text-xs whitespace-nowrap text-fg-muted">
+        {metaParts.map((part, index) => (
+          <Fragment key={part.key}>
+            {index > 0 ? <span aria-hidden="true">·</span> : null}
+            {part.node}
+          </Fragment>
+        ))}
+      </span>
+    ) : null;
 
   return (
     <div className="flex items-center gap-3 px-4 py-2.5 transition-colors duration-150 hover:bg-surface-2/60">

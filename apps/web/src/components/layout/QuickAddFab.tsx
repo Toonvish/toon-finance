@@ -1,4 +1,5 @@
 import { Plus } from "lucide-react";
+import { IconButton } from "@/components/ui/IconButton";
 import { useT } from "@/lib/i18n/I18nProvider.tsx";
 import { useQuickAdd } from "@/lib/quick-add";
 
@@ -15,26 +16,30 @@ import { useQuickAdd } from "@/lib/quick-add";
  * the price, and the reason the lists keep their amounts on the LEFT of the
  * right edge, never underneath it.
  *
+ * The brand fill, the size and the round shape come from `IconButton`
+ * (`variant="brand" size="fab" shape="circle"`) rather than from a second
+ * hand-written class list: a colour surface is EXCHANGED, never overlaid, and
+ * the primitive is extended when it does not fit yet (CLAUDE.md gotcha #57).
+ * Only the fixed positioning belongs to this file.
+ *
  * Hidden from `lg` up, where `SideNav`'s primary button does the same job
- * without covering anything.
+ * without covering anything — and hidden entirely on the screen that already
+ * IS the form (`isAvailable`, see `lib/quick-add.tsx`).
  */
 export function QuickAddFab() {
   const t = useT();
-  const { open } = useQuickAdd();
+  const { open, isAvailable } = useQuickAdd();
+  if (!isAvailable) return null;
   return (
-    <button
-      type="button"
+    <IconButton
+      label={t("transactions.quickAdd.open")}
+      icon={<Plus strokeWidth={2.2} aria-hidden="true" />}
+      variant="brand"
+      size="fab"
+      shape="circle"
       onClick={open}
-      aria-label={t("transactions.quickAdd.open")}
       aria-keyshortcuts="n"
-      className={
-        "bottom-tabbar fixed right-[max(1rem,env(safe-area-inset-right,0px))] z-40 mb-4 flex size-14 " +
-        "items-center justify-center rounded-full bg-brand text-brand-fg shadow-fab " +
-        "transition-[transform,background-color] duration-150 active:scale-95 hover:bg-brand-hover " +
-        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring lg:hidden"
-      }
-    >
-      <Plus className="size-7" strokeWidth={2.2} aria-hidden="true" />
-    </button>
+      className="bottom-tabbar fixed right-[max(1rem,env(safe-area-inset-right,0px))] z-40 mb-4 lg:hidden"
+    />
   );
 }

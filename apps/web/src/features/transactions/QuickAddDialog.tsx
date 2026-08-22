@@ -14,15 +14,13 @@
  * amount field never has to be left to reach the button.
  */
 import { useEffect, useState, type FormEvent, type KeyboardEvent } from "react";
-import { Link } from "@tanstack/react-router";
-import { UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
-import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadingBlock } from "@/components/ui/Spinner";
 import { useT } from "@/lib/i18n/I18nProvider.tsx";
 import { useQuickAdd } from "@/lib/quick-add";
 import { useUnsavedWork } from "@/lib/unsavedWork";
+import { InviteSecondPerson } from "./components/InviteSecondPerson";
 import { TransactionFormFields } from "./components/TransactionFormFields";
 import { useCreateTransactionForm } from "./lib/useCreateForm";
 
@@ -41,10 +39,12 @@ export function QuickAddDialog() {
   const { isOpen, close } = useQuickAdd();
   const form = useCreateTransactionForm();
 
-  // Only while the sheet is open: a closed sheet holds no unsaved work, and
-  // `useCreateTransactionForm` keeps its state across open/close on purpose
-  // (re-opening after a mis-tap must not lose a typed amount).
-  useUnsavedWork(isOpen && form.isDirty);
+  // NOT gated on `isOpen`. `useCreateTransactionForm` keeps its state across
+  // open/close on purpose — re-opening after a mis-tap must not lose a typed
+  // amount — so a closed sheet very much CAN hold unsaved work, and releasing
+  // the claim on close is what let a waiting service-worker update reload the
+  // document and throw that amount away (lib/pwa.ts).
+  useUnsavedWork(form.isDirty);
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -84,7 +84,7 @@ export function QuickAddDialog() {
       {form.isLoadingOther ? (
         <LoadingBlock />
       ) : !form.hasOther ? (
-        <InviteFirst onNavigate={close} />
+        <InviteSecondPerson onNavigate={close} />
       ) : (
         <form id={FORM_ID} onSubmit={handleSubmit} onKeyDown={handleKeyDown} className="flex flex-col gap-5 pb-2">
           <TransactionFormFields
@@ -97,23 +97,6 @@ export function QuickAddDialog() {
         </form>
       )}
     </Dialog>
-  );
-}
-
-/** A one-person household cannot split anything — the only useful action here is the invite. */
-function InviteFirst({ onNavigate }: { onNavigate: () => void }) {
-  const t = useT();
-  return (
-    <EmptyState
-      icon={<UserPlus />}
-      title={t("nav.household")}
-      description={t("settings.household.invite")}
-      action={
-        <Link to="/household" onClick={onNavigate} className="w-full">
-          <Button fullWidth>{t("settings.household.manage")}</Button>
-        </Link>
-      }
-    />
   );
 }
 

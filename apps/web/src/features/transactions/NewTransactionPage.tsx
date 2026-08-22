@@ -15,14 +15,13 @@
  * exist exactly once.
  */
 import type { FormEvent } from "react";
-import { Link } from "@tanstack/react-router";
-import { UserPlus } from "lucide-react";
 import { PageHeader } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/Button";
-import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadingBlock } from "@/components/ui/Spinner";
 import { useT } from "@/lib/i18n/I18nProvider.tsx";
+import { useQuickAddHostedHere } from "@/lib/quick-add";
 import { useUnsavedWork } from "@/lib/unsavedWork";
+import { InviteSecondPerson } from "./components/InviteSecondPerson";
 import { TransactionFormFields } from "./components/TransactionFormFields";
 import { useCreateTransactionForm } from "./lib/useCreateForm";
 
@@ -31,6 +30,9 @@ export function NewTransactionPage() {
   const form = useCreateTransactionForm();
 
   useUnsavedWork(form.isDirty);
+  // This screen IS the capture form, so the global "+" / sidebar button / `n`
+  // stand down — they would open a SECOND, independent draft over this one.
+  useQuickAddHostedHere();
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -42,16 +44,7 @@ export function NewTransactionPage() {
   if (!form.hasOther) {
     return (
       <div className="mx-auto w-full max-w-md p-4">
-        <EmptyState
-          icon={<UserPlus />}
-          title={t("nav.household")}
-          description={t("settings.household.invite")}
-          action={
-            <Link to="/household" className="w-full">
-              <Button fullWidth>{t("settings.household.manage")}</Button>
-            </Link>
-          }
-        />
+        <InviteSecondPerson />
       </div>
     );
   }

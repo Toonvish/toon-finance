@@ -9,6 +9,7 @@
  */
 import { Check } from "lucide-react";
 import type { TxKindValue } from "@toon/shared";
+import { captionClasses } from "@/components/ui/Label";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/I18nProvider.tsx";
 import { kindEffectText, TX_KIND_HINT_KEYS, TX_KIND_ICONS, TX_KIND_LABEL_KEYS, TX_KINDS, translateKind } from "../lib/kinds";
@@ -35,7 +36,7 @@ export function KindPicker({ value, onChange, amountCents, otherName }: KindPick
 
   return (
     <div className="flex flex-col gap-2">
-      <span className="block text-xs font-semibold tracking-wide text-fg-subtle uppercase">
+      <span className={captionClasses}>
         {t("transactions.form.kind")}
       </span>
       <div
