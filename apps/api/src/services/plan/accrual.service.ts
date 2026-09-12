@@ -210,8 +210,12 @@ export async function runCatchUp(db: Database, householdId: string, options: Run
       return { bookedPeriods, skippedPeriods, bookedCents, allIncomplete: !anyResolved && candidatePeriods.length > 0 };
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    await recordRun(db, householdId, options.trigger, from, to, 0, 0, 0, message, startedAt);
+    // `accrual_runs.error` is read by both members via `GET …/plan/runs`. A
+    // driver error's message is the failed SQL WITH its bound parameters, so
+    // only the error's name goes into the row; the full text goes to the log.
+    console.error(`[plan] catch-up failed for household ${householdId}:`, error);
+    const marker = error instanceof Error ? `${error.name}: see server log` : "unknown error: see server log";
+    await recordRun(db, householdId, options.trigger, from, to, 0, 0, 0, marker, startedAt);
     throw error;
   }
 

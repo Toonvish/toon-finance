@@ -11,7 +11,7 @@
  * time; for POST it starts `null` and is linked after the row exists (both
  * inside the same `withTransaction`, so a claim is never left dangling).
  */
-import { eq, lt } from "drizzle-orm";
+import { and, eq, lt } from "drizzle-orm";
 import { mutationClaims } from "../../db/schema.ts";
 import { nowMs } from "../../lib/clock.ts";
 import type { DbLike } from "../support.ts";
@@ -75,8 +75,14 @@ export async function linkMutationClaim(db: DbLike, mutationId: string, transact
  * gone, done" instead of a spurious 404 — see docs/spec.md §3.1: a replay is
  * never an error.
  */
-export async function peekMutationClaim(db: DbLike, mutationId: string): Promise<boolean> {
-  const existing = await db.select({ id: mutationClaims.id }).from(mutationClaims).where(eq(mutationClaims.id, mutationId)).limit(1);
+export async function peekMutationClaim(db: DbLike, mutationId: string, householdId: string): Promise<boolean> {
+  // Scoped to the household: a client-minted id from ANOTHER household must
+  // never turn this delete into a silent "already done".
+  const existing = await db
+    .select({ id: mutationClaims.id })
+    .from(mutationClaims)
+    .where(and(eq(mutationClaims.id, mutationId), eq(mutationClaims.householdId, householdId)))
+    .limit(1);
   return existing.length > 0;
 }
 

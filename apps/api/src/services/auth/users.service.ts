@@ -5,7 +5,7 @@
 import type { SessionUser } from "../../lib/types.ts";
 import type { UserResponse } from "@toon/shared";
 import { isLocale } from "@toon/shared";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import type { Database } from "../../db/client.ts";
 import { type UserRow, users } from "../../db/schema.ts";
 import { env } from "../../env.ts";
@@ -133,8 +133,13 @@ export async function claimPlaceholderUser(database: DbLike, userId: string, inp
   const row = rows[0];
   if (!row) throw ApiError.notFound();
   if (!isPlaceholderUser(row)) throw ApiError.conflict("member_has_account", "server.household.memberHasAccount");
+  // Conditional on the row STILL being a placeholder: the check above and
+  // this write are not one statement, and two holders of the same claim link
+  // registering at once must not let the second overwrite the first one's
+  // e-mail and password on the very same user id.
+  let claimed: Array<{ id: string }>;
   try {
-    await database
+    claimed = await database
       .update(users)
       .set({
         email: input.email.trim(),
@@ -143,11 +148,13 @@ export async function claimPlaceholderUser(database: DbLike, userId: string, inp
         passwordHash: input.passwordHash,
         updatedAt: Date.now(),
       })
-      .where(eq(users.id, userId));
+      .where(and(eq(users.id, userId), isNull(users.passwordHash)))
+      .returning({ id: users.id });
   } catch (error) {
     if (isUniqueViolation(error)) throw ApiError.conflict("email_taken", "server.auth.emailTaken");
     throw error;
   }
+  if (claimed.length === 0) throw ApiError.conflict("member_has_account", "server.household.memberHasAccount");
   const updated = await database.select().from(users).where(eq(users.id, userId)).limit(1);
   if (!updated[0]) throw ApiError.internal();
   return updated[0];

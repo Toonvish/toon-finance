@@ -245,6 +245,17 @@ interface RequestInput extends RequestOptions {
   body?: unknown;
 }
 
+/**
+ * Every id interpolated into a URL PATH goes through here. Ids are UUIDs
+ * from our own responses, but some arrive via route params the address bar
+ * controls — an unencoded `..%2F` or `?` would re-target the request to a
+ * different endpoint (with the caller's own credentials, so no privilege
+ * gain, still not a request anyone asked for).
+ */
+function seg(value: string): string {
+  return encodeURIComponent(value);
+}
+
 async function request<T>(path: string, input: RequestInput = {}): Promise<T> {
   const { method = "GET", body, signal, allowUnauthorized } = input;
 
@@ -456,7 +467,7 @@ export function fetchHousehold(
   householdId: string,
   options?: RequestOptions,
 ): Promise<HouseholdDetailResponse> {
-  return request<HouseholdDetailResponse>(`/api/households/${householdId}`, options);
+  return request<HouseholdDetailResponse>(`/api/households/${seg(householdId)}`, options);
 }
 
 export function updateHousehold(
@@ -464,7 +475,7 @@ export function updateHousehold(
   body: UpdateHouseholdRequest,
   options?: RequestOptions,
 ): Promise<HouseholdResponse> {
-  return request<HouseholdResponse>(`/api/households/${householdId}`, {
+  return request<HouseholdResponse>(`/api/households/${seg(householdId)}`, {
     ...options,
     method: "PATCH",
     body,
@@ -475,7 +486,7 @@ export function fetchHouseholdMembers(
   householdId: string,
   options?: RequestOptions,
 ): Promise<MemberListResponse> {
-  return request<MemberListResponse>(`/api/households/${householdId}/members`, options);
+  return request<MemberListResponse>(`/api/households/${seg(householdId)}/members`, options);
 }
 
 /**
@@ -488,7 +499,7 @@ export function createPlaceholderMember(
   body: CreatePlaceholderMemberRequest,
   options?: RequestOptions,
 ): Promise<MemberListResponse["items"][number]> {
-  return request(`/api/households/${householdId}/members`, { ...options, method: "POST", body });
+  return request(`/api/households/${seg(householdId)}/members`, { ...options, method: "POST", body });
 }
 
 /** Renames the CALLER's own display name or the placeholder's — the API 403s on any other userId. */
@@ -498,7 +509,7 @@ export function updateMemberDisplayName(
   body: UpdateMemberRequest,
   options?: RequestOptions,
 ): Promise<MemberListResponse["items"][number]> {
-  return request(`/api/households/${householdId}/members/${userId}`, {
+  return request(`/api/households/${seg(householdId)}/members/${seg(userId)}`, {
     ...options,
     method: "PATCH",
     body,
@@ -510,7 +521,7 @@ export function updateMemberDisplayName(
  * placeholder (any other userId is 403). 409 `member_has_ledger`.
  */
 export function leaveHousehold(householdId: string, userId: string, options?: RequestOptions): Promise<void> {
-  return request<void>(`/api/households/${householdId}/members/${userId}`, {
+  return request<void>(`/api/households/${seg(householdId)}/members/${seg(userId)}`, {
     ...options,
     method: "DELETE",
   });
@@ -520,7 +531,7 @@ export function fetchHouseholdInvites(
   householdId: string,
   options?: RequestOptions,
 ): Promise<InviteListResponse> {
-  return request<InviteListResponse>(`/api/households/${householdId}/invites`, options);
+  return request<InviteListResponse>(`/api/households/${seg(householdId)}/invites`, options);
 }
 
 export function createHouseholdInvite(
@@ -528,7 +539,7 @@ export function createHouseholdInvite(
   body: CreateInviteRequest,
   options?: RequestOptions,
 ): Promise<InviteResponse> {
-  return request<InviteResponse>(`/api/households/${householdId}/invites`, {
+  return request<InviteResponse>(`/api/households/${seg(householdId)}/invites`, {
     ...options,
     method: "POST",
     body,
@@ -540,7 +551,7 @@ export function revokeHouseholdInvite(
   inviteId: string,
   options?: RequestOptions,
 ): Promise<void> {
-  return request<void>(`/api/households/${householdId}/invites/${inviteId}`, {
+  return request<void>(`/api/households/${seg(householdId)}/invites/${seg(inviteId)}`, {
     ...options,
     method: "DELETE",
   });
@@ -551,7 +562,7 @@ export function revokeHouseholdInvite(
 /* -------------------------------------------------------------------------- */
 
 function transactionsBase(householdId: string): string {
-  return `/api/households/${householdId}/transactions`;
+  return `/api/households/${seg(householdId)}/transactions`;
 }
 
 export function fetchTransactions(
@@ -607,7 +618,7 @@ export function fetchTransaction(
   transactionId: string,
   options?: RequestOptions,
 ): Promise<TransactionResponse> {
-  return request<TransactionResponse>(`${transactionsBase(householdId)}/${transactionId}`, options);
+  return request<TransactionResponse>(`${transactionsBase(householdId)}/${seg(transactionId)}`, options);
 }
 
 export function updateTransaction(
@@ -616,7 +627,7 @@ export function updateTransaction(
   body: UpdateTransactionRequest,
   options?: RequestOptions,
 ): Promise<TransactionResponse> {
-  return request<TransactionResponse>(`${transactionsBase(householdId)}/${transactionId}`, {
+  return request<TransactionResponse>(`${transactionsBase(householdId)}/${seg(transactionId)}`, {
     ...options,
     method: "PATCH",
     body,
@@ -629,7 +640,7 @@ export function deleteTransaction(
   mutationId?: string,
   options?: RequestOptions,
 ): Promise<void> {
-  return request<void>(`${transactionsBase(householdId)}/${transactionId}${queryString({ mutationId })}`, {
+  return request<void>(`${transactionsBase(householdId)}/${seg(transactionId)}${queryString({ mutationId })}`, {
     ...options,
     method: "DELETE",
   });
@@ -645,7 +656,7 @@ export function fetchCategories(
   options?: RequestOptions,
 ): Promise<CategoryListResponse> {
   return request<CategoryListResponse>(
-    `/api/households/${householdId}/categories${queryString({ includeHidden })}`,
+    `/api/households/${seg(householdId)}/categories${queryString({ includeHidden })}`,
     options,
   );
 }
@@ -655,7 +666,7 @@ export function createCategory(
   body: CreateCategoryRequest,
   options?: RequestOptions,
 ): Promise<CategoryResponse> {
-  return request<CategoryResponse>(`/api/households/${householdId}/categories`, {
+  return request<CategoryResponse>(`/api/households/${seg(householdId)}/categories`, {
     ...options,
     method: "POST",
     body,
@@ -668,7 +679,7 @@ export function updateCategory(
   body: UpdateCategoryRequest,
   options?: RequestOptions,
 ): Promise<CategoryResponse> {
-  return request<CategoryResponse>(`/api/households/${householdId}/categories/${categoryId}`, {
+  return request<CategoryResponse>(`/api/households/${seg(householdId)}/categories/${seg(categoryId)}`, {
     ...options,
     method: "PATCH",
     body,
@@ -682,7 +693,7 @@ export function deleteCategory(
   options?: RequestOptions,
 ): Promise<void> {
   return request<void>(
-    `/api/households/${householdId}/categories/${categoryId}${queryString({ reassignTo })}`,
+    `/api/households/${seg(householdId)}/categories/${seg(categoryId)}${queryString({ reassignTo })}`,
     { ...options, method: "DELETE" },
   );
 }
@@ -693,7 +704,7 @@ export function fetchTags(
   options?: RequestOptions,
 ): Promise<TagListResponse> {
   return request<TagListResponse>(
-    `/api/households/${householdId}/tags${queryString({ q: query.q, limit: query.limit })}`,
+    `/api/households/${seg(householdId)}/tags${queryString({ q: query.q, limit: query.limit })}`,
     options,
   );
 }
@@ -704,7 +715,7 @@ export function updateTag(
   body: UpdateTagRequest,
   options?: RequestOptions,
 ): Promise<TagResponse> {
-  return request<TagResponse>(`/api/households/${householdId}/tags/${tagId}`, {
+  return request<TagResponse>(`/api/households/${seg(householdId)}/tags/${seg(tagId)}`, {
     ...options,
     method: "PATCH",
     body,
@@ -712,7 +723,7 @@ export function updateTag(
 }
 
 export function deleteTag(householdId: string, tagId: string, options?: RequestOptions): Promise<void> {
-  return request<void>(`/api/households/${householdId}/tags/${tagId}`, { ...options, method: "DELETE" });
+  return request<void>(`/api/households/${seg(householdId)}/tags/${seg(tagId)}`, { ...options, method: "DELETE" });
 }
 
 /* -------------------------------------------------------------------------- */
@@ -720,7 +731,7 @@ export function deleteTag(householdId: string, tagId: string, options?: RequestO
 /* -------------------------------------------------------------------------- */
 
 function planBase(householdId: string): string {
-  return `/api/households/${householdId}/plan`;
+  return `/api/households/${seg(householdId)}/plan`;
 }
 
 export function fetchPlan(householdId: string, options?: RequestOptions): Promise<PlanResponse> {
@@ -795,7 +806,7 @@ export function updateFixedCostItem(
   body: UpdateFixedCostItemRequest,
   options?: RequestOptions,
 ): Promise<FixedCostItemResponse> {
-  return request<FixedCostItemResponse>(`${planBase(householdId)}/items/${itemId}`, {
+  return request<FixedCostItemResponse>(`${planBase(householdId)}/items/${seg(itemId)}`, {
     ...options,
     method: "PATCH",
     body,
@@ -807,7 +818,7 @@ export function deleteFixedCostItem(
   itemId: string,
   options?: RequestOptions,
 ): Promise<void> {
-  return request<void>(`${planBase(householdId)}/items/${itemId}`, { ...options, method: "DELETE" });
+  return request<void>(`${planBase(householdId)}/items/${seg(itemId)}`, { ...options, method: "DELETE" });
 }
 
 export function createIncome(
@@ -824,7 +835,7 @@ export function updateIncome(
   body: UpdateIncomeRequest,
   options?: RequestOptions,
 ): Promise<IncomeResponse> {
-  return request<IncomeResponse>(`${planBase(householdId)}/incomes/${incomeId}`, {
+  return request<IncomeResponse>(`${planBase(householdId)}/incomes/${seg(incomeId)}`, {
     ...options,
     method: "PATCH",
     body,
@@ -832,7 +843,7 @@ export function updateIncome(
 }
 
 export function deleteIncome(householdId: string, incomeId: string, options?: RequestOptions): Promise<void> {
-  return request<void>(`${planBase(householdId)}/incomes/${incomeId}`, { ...options, method: "DELETE" });
+  return request<void>(`${planBase(householdId)}/incomes/${seg(incomeId)}`, { ...options, method: "DELETE" });
 }
 
 /* -------------------------------------------------------------------------- */
@@ -845,7 +856,7 @@ export function fetchBalance(
   options?: RequestOptions,
 ): Promise<BalanceResponse> {
   return request<BalanceResponse>(
-    `/api/households/${householdId}/balance${queryString({ includeAggregates: query.includeAggregates })}`,
+    `/api/households/${seg(householdId)}/balance${queryString({ includeAggregates: query.includeAggregates })}`,
     options,
   );
 }
@@ -856,7 +867,7 @@ export function fetchBalanceHistory(
   options?: RequestOptions,
 ): Promise<BalanceHistoryResponse> {
   return request<BalanceHistoryResponse>(
-    `/api/households/${householdId}/balance/history${queryString({
+    `/api/households/${seg(householdId)}/balance/history${queryString({
       from: query.from,
       to: query.to,
       includeAggregates: query.includeAggregates,
@@ -875,7 +886,7 @@ export function fetchSettlements(
   options?: RequestOptions,
 ): Promise<TransactionListResponse> {
   return request<TransactionListResponse>(
-    `/api/households/${householdId}/settlements${queryString({
+    `/api/households/${seg(householdId)}/settlements${queryString({
       limit: query.limit,
       offset: query.offset,
     })}`,
@@ -888,7 +899,7 @@ export function createSettlement(
   body: CreateSettlementRequest,
   options?: RequestOptions,
 ): Promise<SettlementResponse> {
-  return request<SettlementResponse>(`/api/households/${householdId}/settlements`, {
+  return request<SettlementResponse>(`/api/households/${seg(householdId)}/settlements`, {
     ...options,
     method: "POST",
     body,

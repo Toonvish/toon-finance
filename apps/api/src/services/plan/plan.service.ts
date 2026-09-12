@@ -35,7 +35,7 @@ import { ApiError } from "../../lib/errors.ts";
 import { nowMs } from "../../lib/clock.ts";
 import { toIso } from "../../lib/http.ts";
 import { isUniqueViolation } from "../auth/users.service.ts";
-import { otherMemberId } from "../households/members.service.ts";
+import { getMember, otherMemberId } from "../households/members.service.ts";
 import type { DbLike } from "../support.ts";
 import { catchUpRange, isPlanComputable } from "./period-scan.ts";
 
@@ -180,7 +180,36 @@ async function maxOccupiedPeriod(db: Database, householdId: string): Promise<str
   return rows[0]?.planPeriod ?? null;
 }
 
+/**
+ * `activeTo`/`validTo` before `activeFrom`/`validFrom` would hit the DB
+ * CHECK and surface as a 500 (plus a console.error per attempt). The same
+ * key the client-side validation uses; thrown explicitly — a Zod refinement
+ * on a partial PATCH cannot see the row's other half (CLAUDE.md gotcha 48).
+ */
+function assertPeriodRange(from: string, to: string | null | undefined): void {
+  if (to !== null && to !== undefined && comparePeriods(to, from) < 0) {
+    throw ApiError.validationFailed(undefined, "server.validation.periodRange");
+  }
+}
+
+/**
+ * The plan's payer and every income's person MUST be seated in THIS
+ * household. The FK only proves `users.id` exists — a departed member or a
+ * stranger's id would otherwise become the payer of record of every future
+ * booking, and `otherMemberId()` would pick an arbitrary "other".
+ */
+async function assertMember(db: Database, householdId: string, userId: string): Promise<void> {
+  await getMember(db, householdId, userId);
+}
+
 export async function updatePlan(db: Database, householdId: string, input: UpdatePlanRequest): Promise<PlanResponse> {
+  if (input.payerId !== undefined) await assertMember(db, householdId, input.payerId);
+  if (input.enabled === true && input.payerId === undefined) {
+    // Switching on must start from a member, too — the payer of record may
+    // have been seated once and left since.
+    const current = await loadPlanRow(db, householdId);
+    await assertMember(db, householdId, current.payerId);
+  }
   if (input.startPeriod !== undefined) {
     const occupied = await maxOccupiedPeriod(db, householdId);
     if (occupied && comparePeriods(input.startPeriod, occupied) <= 0) {
@@ -224,6 +253,7 @@ async function nextItemPosition(db: Database, householdId: string): Promise<numb
 }
 
 export async function createFixedCostItem(db: Database, householdId: string, input: CreateFixedCostItemRequest): Promise<FixedCostItemResponse> {
+  assertPeriodRange(input.activeFrom, input.activeTo);
   const id = crypto.randomUUID();
   const timestamp = nowMs();
   const position = input.position ?? (await nextItemPosition(db, householdId));
@@ -254,7 +284,8 @@ export async function updateFixedCostItem(
   itemId: string,
   input: UpdateFixedCostItemRequest,
 ): Promise<FixedCostItemResponse> {
-  await loadItemOr404(db, householdId, itemId);
+  const existing = await loadItemOr404(db, householdId, itemId);
+  assertPeriodRange(input.activeFrom ?? existing.activeFrom, input.activeTo === undefined ? existing.activeTo : input.activeTo);
   const patch: Partial<typeof fixedCostItems.$inferInsert> = { updatedAt: nowMs() };
   if (input.label !== undefined) patch.label = input.label;
   if (input.amountCents !== undefined) patch.amountCents = input.amountCents;
@@ -289,6 +320,8 @@ async function loadIncomeOr404(db: Database, householdId: string, incomeId: stri
  * compute time instead (`period-scan.ts`'s `isPlanComputable`).
  */
 export async function createIncome(db: Database, householdId: string, input: CreateIncomeRequest): Promise<IncomeResponse> {
+  await assertMember(db, householdId, input.personId);
+  assertPeriodRange(input.validFrom, input.validTo);
   const id = crypto.randomUUID();
   const timestamp = nowMs();
   try {
@@ -310,7 +343,9 @@ export async function createIncome(db: Database, householdId: string, input: Cre
 }
 
 export async function updateIncome(db: Database, householdId: string, incomeId: string, input: UpdateIncomeRequest): Promise<IncomeResponse> {
-  await loadIncomeOr404(db, householdId, incomeId);
+  const existing = await loadIncomeOr404(db, householdId, incomeId);
+  if (input.personId !== undefined) await assertMember(db, householdId, input.personId);
+  assertPeriodRange(input.validFrom ?? existing.validFrom, input.validTo === undefined ? existing.validTo : input.validTo);
   const patch: Partial<typeof incomes.$inferInsert> = { updatedAt: nowMs() };
   if (input.personId !== undefined) patch.personId = input.personId;
   if (input.amountCents !== undefined) patch.amountCents = input.amountCents;

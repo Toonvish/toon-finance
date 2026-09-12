@@ -1,14 +1,36 @@
 import { z } from "zod";
 import { LOCALES } from "../i18n/locale.ts";
+import { refineKey } from "../i18n/zod.ts";
 import { IdSchema, IsoDateSchema, MemberSlotSchema } from "./common.ts";
 
 /** Auth is email + password only (docs/spec.md §1.2 #4) — no OAuth, no provider enum. */
 export const PasswordSchema = z.string().min(10).max(200);
+/**
+ * A password as SUBMITTED for verification (login, current password, reset).
+ * No minimum — a legacy or wrong password must still reach argon2 and fail
+ * there, indistinguishably — but the same ceiling as `PasswordSchema`: the
+ * request body limit is 20 MB, and argon2id over a multi-megabyte string on
+ * an unauthenticated endpoint is a CPU-pinning primitive, not a login.
+ */
+export const SubmittedPasswordSchema = z.string().max(200);
+/** Opaque 43-char base64url tokens (invite, reset) — anything longer is not ours. */
+export const OpaqueTokenSchema = z.string().min(1).max(200);
 
 /** Trims + lowercases BEFORE validating, so `" Foo@Bar.DE "` is accepted. */
 export const EmailSchema = z.string().max(254).trim().toLowerCase().pipe(z.email());
 
-export const DisplayNameSchema = z.string().trim().min(1).max(80);
+/**
+ * Display and household names: 1–80 chars, no control characters. A `\n` in
+ * a household name would otherwise travel into the invite mail's Subject and
+ * be refused by the SMTP header guard — a user-triggerable delivery failure.
+ */
+const NO_CONTROL_CHARS = /^[^\p{Cc}]*$/u;
+export const DisplayNameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(80)
+  .refine((value) => NO_CONTROL_CHARS.test(value), refineKey("server.validation.noControlChars"));
 export const LocaleSchema = z.enum(LOCALES);
 
 export const RegisterRequestSchema = z.object({
@@ -16,13 +38,13 @@ export const RegisterRequestSchema = z.object({
   name: DisplayNameSchema,
   password: PasswordSchema,
   /** Present when joining an existing household via an invite link. */
-  inviteToken: z.string().optional(),
+  inviteToken: OpaqueTokenSchema.optional(),
 });
 export type RegisterRequest = z.infer<typeof RegisterRequestSchema>;
 
 export const LoginRequestSchema = z.object({
   email: EmailSchema,
-  password: z.string(),
+  password: SubmittedPasswordSchema,
 });
 export type LoginRequest = z.infer<typeof LoginRequestSchema>;
 
@@ -33,7 +55,7 @@ export const UpdateProfileRequestSchema = z.object({
 export type UpdateProfileRequest = z.infer<typeof UpdateProfileRequestSchema>;
 
 export const ChangePasswordRequestSchema = z.object({
-  currentPassword: z.string(),
+  currentPassword: SubmittedPasswordSchema,
   newPassword: PasswordSchema,
 });
 export type ChangePasswordRequest = z.infer<typeof ChangePasswordRequestSchema>;
@@ -42,7 +64,7 @@ export const ForgotPasswordRequestSchema = z.object({ email: EmailSchema });
 export type ForgotPasswordRequest = z.infer<typeof ForgotPasswordRequestSchema>;
 
 export const ResetPasswordRequestSchema = z.object({
-  token: z.string(),
+  token: OpaqueTokenSchema,
   password: PasswordSchema,
 });
 export type ResetPasswordRequest = z.infer<typeof ResetPasswordRequestSchema>;

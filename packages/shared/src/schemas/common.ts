@@ -14,8 +14,23 @@ function isPeriodString(value: string): boolean {
   return PERIOD_RE.test(value);
 }
 
-/** A calendar month, `'YYYY-MM'` (docs/ledger-spec.md §0). */
-export const PeriodSchema = z.string().refine(isPeriodString, refineKey("server.validation.periodFormat"));
+/**
+ * The earliest and latest month the API accepts anywhere a period is input.
+ * `YYYY` alone admits `0001-01`, and every plan path walks
+ * `periodsInclusive(from, now)`: a household whose `startPeriod` is year 1
+ * makes the boot catch-up loop ~24 000 months (six statements each, inside
+ * ONE write transaction, BEFORE the server accepts traffic) and every
+ * `GET …/plan` build the same list. A cash book for two has no month before
+ * 2000 and none after 2100.
+ */
+export const MIN_PERIOD = "2000-01";
+export const MAX_PERIOD = "2100-12";
+
+/** A calendar month, `'YYYY-MM'` (docs/ledger-spec.md §0), inside `[MIN_PERIOD, MAX_PERIOD]`. */
+export const PeriodSchema = z
+  .string()
+  .refine(isPeriodString, refineKey("server.validation.periodFormat"))
+  .refine((value) => value >= MIN_PERIOD && value <= MAX_PERIOD, refineKey("server.validation.periodBounds"));
 export type PeriodValue = z.infer<typeof PeriodSchema>;
 
 /** Signed integer cents — the only money representation on the wire. Never a float, never a decimal string. */

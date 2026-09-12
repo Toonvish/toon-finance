@@ -3,7 +3,8 @@ import { LOCALES } from "../i18n/locale.ts";
 import { DisplayNameSchema, EmailSchema, HouseholdSummarySchema } from "./auth.ts";
 import { IdSchema, IsoDateSchema, MailDeliverySchema, MemberSlotSchema } from "./common.ts";
 
-export const HouseholdNameSchema = z.string().trim().min(1).max(80);
+/** Same rules as a display name — see `DisplayNameSchema` for the control-character ban. */
+export const HouseholdNameSchema = DisplayNameSchema;
 
 export const CreateHouseholdRequestSchema = z.object({
   name: HouseholdNameSchema,

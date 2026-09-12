@@ -21,7 +21,9 @@ function prepareUrl(url: string): string {
   const path = url.slice("file:".length);
   if (path.startsWith(":memory:") || path.length === 0) return url;
   const absolute = isAbsolute(path) ? path : resolve(process.cwd(), path);
-  mkdirSync(dirname(absolute), { recursive: true });
+  // 0700: the file holds two people's finances; a world-readable data/ on a
+  // developer host (default umask -> 0755) is not what anyone intended.
+  mkdirSync(dirname(absolute), { recursive: true, mode: 0o700 });
   return `file:${absolute}`;
 }
 
@@ -54,6 +56,10 @@ function prepareUrl(url: string): string {
 const LOCAL_FILE_PRAGMAS: readonly string[] = [
   "journal_mode = WAL",
   "synchronous = FULL",
+  // Every `onDelete: cascade/restrict` in schema.ts depends on this, and it is
+  // PER-CONNECTION and only a compile-time default of the bundled libsql —
+  // sent explicitly so the schema's guarantees never hinge on a build flag.
+  "foreign_keys = ON",
   // Wait rather than throw SQLITE_BUSY when another connection holds the
   // write lock. The default is 0, i.e. fail immediately.
   "busy_timeout = 5000",

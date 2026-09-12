@@ -19,6 +19,7 @@ export const serverEn: LocaleCatalog<ServerCatalog> = {
   "server.error.internal": "Unexpected error. Please try again later.",
   "server.error.requestFailed": "The request failed.",
   "server.error.tooManyAttempts": "Too many attempts. Please try again in {seconds} seconds.",
+  "server.error.originMismatch": "This request did not come from the app and was rejected.",
 
   /* --------------------------------- auth --------------------------------- */
   "server.auth.emailTaken": "An account with this email address already exists.",
@@ -32,6 +33,7 @@ export const serverEn: LocaleCatalog<ServerCatalog> = {
   "server.household.full": "This household already has two members.",
   "server.household.memberHasLedger": "There are still transactions for this person. Remove them first.",
   "server.household.memberHasAccount": "This person already has an account of their own.",
+  "server.household.anchorCannotLeave": "The first person cannot leave while the second is still in the household.",
 
   /* -------------------------------- invite --------------------------------- */
   "server.invite.invalid": "This invite is invalid or has already been redeemed.",
@@ -124,7 +126,9 @@ export const serverEn: LocaleCatalog<ServerCatalog> = {
 
   /* ------------------------------- validation (custom) ---------------------------- */
   "server.validation.periodFormat": "Please enter a month in the format YYYY-MM.",
+  "server.validation.periodBounds": "The month must lie between 2000-01 and 2100-12.",
   "server.validation.amountNotZero": "The amount must not be 0.",
   "server.validation.amountPositive": "The amount must be greater than 0.",
+  "server.validation.noControlChars": "The name must not contain control characters or line breaks.",
   "server.validation.periodRange": "The end must not be before the start.",
 };

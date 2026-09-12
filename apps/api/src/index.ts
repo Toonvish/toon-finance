@@ -14,6 +14,8 @@ import { env } from "./env.ts";
 import { notFoundHandler, onErrorHandler } from "./lib/errors.ts";
 import { localeMiddleware } from "./lib/locale.ts";
 import type { AppEnv } from "./lib/types.ts";
+import { originGuard } from "./middleware/originGuard.ts";
+import { securityHeaders } from "./middleware/securityHeaders.ts";
 import { webAppMiddleware } from "./middleware/staticWeb.ts";
 import { authRoutes } from "./routes/auth.ts";
 import { balanceRoutes } from "./routes/balance.ts";
@@ -41,6 +43,18 @@ if (!env.isTest) app.use("*", logger());
 
 // 3. Accept-Language negotiation, before every router — see lib/locale.ts.
 app.use("*", localeMiddleware);
+
+// 3a. Browser hardening headers on EVERY response (CSP, frame denial, nosniff,
+// …) — see middleware/securityHeaders.ts for what differs from Hono's defaults
+// and why HSTS is deliberately left to the edge proxy.
+app.use("*", securityHeaders(env.webDistDir));
+
+// 3b. CSRF defence in depth for every state-changing API call: a browser
+// request from another origin (or a SIBLING app on the shared toon-edge
+// domain, which `SameSite=Lax` alone lets through) is refused before any
+// router parses its body. Runs BEFORE requireSession so a forged request
+// never even slides the victim's session expiry.
+app.use("/api/*", originGuard());
 
 /**
  * Liveness/readiness probe. No session required, never cached by the service

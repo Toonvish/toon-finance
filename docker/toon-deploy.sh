@@ -64,7 +64,9 @@ die() { printf '%s  FEHLER: %s\n' "$(date -Is)" "$*" >&2; exit 1; }
 # running this directly passes it as normal arguments.
 request="${SSH_ORIGINAL_COMMAND:-$*}"
 # shellcheck disable=SC2206  # deliberate word splitting: the request is validated below
+set -f  # no globbing: a request like `deploy *` must not expand against the cwd
 parts=($request)
+set +f
 verb="${parts[0]:-}"
 ref="${parts[1]:-}"
 

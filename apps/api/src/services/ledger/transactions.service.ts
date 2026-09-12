@@ -29,7 +29,7 @@ import { ApiError } from "../../lib/errors.ts";
 import { nowMs } from "../../lib/clock.ts";
 import { toIso } from "../../lib/http.ts";
 import { otherMemberId, requireOtherMemberId, slot1UserId } from "../households/members.service.ts";
-import { withTransaction, type DbLike } from "../support.ts";
+import { withTransaction, type DbLike, escapeLikePattern } from "../support.ts";
 import { categorySlugOf, categorySlugsByIds } from "../categories/categories.service.ts";
 import { clearTransactionTags, syncTransactionTags, tagRefsByTransactionIds, tagRefsOf } from "../tags/tags.service.ts";
 import { sammelbuchungTransactionIds } from "./aggregateExclusion.ts";
@@ -261,7 +261,7 @@ export async function updateTransaction(
  */
 export async function deleteTransaction(db: Database, householdId: string, transactionId: string, mutationId?: string): Promise<void> {
   await withTransaction(db, async (tx) => {
-    if (mutationId && (await peekMutationClaim(tx, mutationId))) return; // replay of an already-applied delete
+    if (mutationId && (await peekMutationClaim(tx, mutationId, householdId))) return; // replay of an already-applied delete
 
     const existing = await loadRowOr404(tx, householdId, transactionId);
     assertManual(existing);
@@ -351,13 +351,14 @@ export async function listTransactions(
   if (filters.categoryId) conditions.push(eq(transactions.categoryId, filters.categoryId));
   if (filters.origin) conditions.push(eq(transactions.origin, filters.origin));
   if (filters.q && filters.q.trim().length > 0) {
-    conditions.push(sql`lower(${transactions.description}) like ${`%${filters.q.trim().toLowerCase()}%`}`);
+    const pattern = `%${escapeLikePattern(filters.q.trim().toLowerCase())}%`;
+    conditions.push(sql`lower(${transactions.description}) like ${pattern} escape '\\'`);
   }
 
   if (filters.kind) conditions.push(...kindFilterConditions(filters.kind, viewerId));
 
   if (filters.tagIds) {
-    const ids = filters.tagIds.split(",").map((id) => id.trim()).filter((id) => id.length > 0);
+    const ids = [...new Set(filters.tagIds.split(",").map((id) => id.trim()).filter((id) => id.length > 0))].slice(0, 10);
     if (ids.length > 0) {
       const matching = await transactionIdsWithAllTags(db, ids);
       if (matching.length === 0) return { items: [], total: 0, limit: filters.limit, offset: filters.offset };

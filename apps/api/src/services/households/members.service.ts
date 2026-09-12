@@ -200,7 +200,7 @@ export async function updateMemberDisplayName(
  * — the balance would otherwise hang off a member who no longer exists.
  */
 export async function removeMember(db: Database, householdId: string, userId: string): Promise<void> {
-  await getMember(db, householdId, userId);
+  const member = await getMember(db, householdId, userId);
 
   const ledgerRows = await db
     .select({ id: transactions.id })
@@ -211,9 +211,50 @@ export async function removeMember(db: Database, householdId: string, userId: st
     throw ApiError.conflict("member_has_ledger", "server.household.memberHasLedger");
   }
 
-  await db
-    .delete(householdMembers)
-    .where(and(eq(householdMembers.householdId, householdId), eq(householdMembers.userId, userId)));
+  // The fixed-cost plan names a payer, and `createHousehold` seeds it with
+  // the owner — so "is the payer" alone cannot block leaving, or no owner
+  // could ever leave. An ENABLED plan is different: it would keep booking
+  // every month against a payer who is no longer a member, and
+  // `otherMemberId()` would then charge the person who stayed with nobody on
+  // the other side of the balance. A disabled plan is re-pointed at the
+  // remaining member below instead, so enabling it later starts from a
+  // member, not a ghost.
+  const [plan] = await db
+    .select({ payerId: fixedCostPlans.payerId, enabled: fixedCostPlans.enabled })
+    .from(fixedCostPlans)
+    .where(eq(fixedCostPlans.householdId, householdId))
+    .limit(1);
+  if (plan?.payerId === userId && plan.enabled) {
+    throw ApiError.conflict("member_has_ledger", "server.household.memberHasLedger");
+  }
+
+  // Slot 1 anchors the balance sign convention (`slot1UserId`), and every
+  // ledger endpoint resolves it. If slot 1 left while slot 2 is seated, the
+  // remaining person's `/transactions`, `/balance` and `/settlements` would
+  // all fail until someone new accepted an invite — one DELETE by a hostile
+  // partner would wedge the other person's app. Slot 2 leaves first.
+  if (member.memberSlot === 1 && (await memberCount(db, householdId)) > 1) {
+    throw ApiError.conflict("conflict", "server.household.anchorCannotLeave");
+  }
+
+  const remaining = await otherMemberId(db, householdId, userId);
+  await withTransaction(db, async (tx) => {
+    // Incomes are plan input FOR a person; a person who left has none here.
+    await tx.delete(incomes).where(and(eq(incomes.householdId, householdId), eq(incomes.personId, userId)));
+    if (plan?.payerId === userId && remaining !== null) {
+      await tx.update(fixedCostPlans).set({ payerId: remaining, updatedAt: nowMs() }).where(eq(fixedCostPlans.householdId, householdId));
+    }
+    await tx.delete(householdMembers).where(and(eq(householdMembers.householdId, householdId), eq(householdMembers.userId, userId)));
+  });
+}
+
+async function memberCount(db: DbLike, householdId: string): Promise<number> {
+  const rows = await db
+    .select({ userId: householdMembers.userId })
+    .from(householdMembers)
+    .where(eq(householdMembers.householdId, householdId))
+    .limit(2);
+  return rows.length;
 }
 
 /**

@@ -114,9 +114,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const isOfflineData = user !== null && (!isOnline || meResult.isError);
 
   // A 401 from any endpoint sends the user to the login screen (client-side).
+  // The server just said this session is gone (expired, revoked from another
+  // device, password reset) — so the persisted ledger goes the same way
+  // `useLogout` sends it: otherwise the previous user's transactions stay in
+  // IndexedDB on a shared tablet, restorable on the next cold offline start.
   useEffect(() => {
     setUnauthorizedHandler((next) => {
       queryClient.setQueryData(queryKeys.me(), null);
+      setActiveCacheUser(null);
+      void purgePersistedCache();
       void navigate({ to: "/login", search: { next }, replace: true });
     });
     return () => setUnauthorizedHandler(null);

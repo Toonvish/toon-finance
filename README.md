@@ -120,8 +120,8 @@ cp docker/env.example .env && nano .env    # TOON_HOSTNAME + SESSION_SECRET setz
 docker compose up -d
 ```
 
-Details, Zertifikats-Modi (`acme` vs. `internal`) und der Mailpit-Sink: `docker/Caddyfile` und
-`docker/env.example` sind vollständig kommentiert.
+Details, Zertifikats-Modi (`acme` vs. `internal`) und der Mailpit-Sink: der Caddyfile liegt im
+`toon-edge`-Repo (ein Snippet für alle toon-Apps); `docker/env.example` ist vollständig kommentiert.
 
 ## Lizenz
 

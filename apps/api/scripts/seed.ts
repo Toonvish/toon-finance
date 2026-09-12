@@ -16,7 +16,26 @@ import { createUser, findUserByEmail } from "../src/services/auth/users.service.
 import { createHousehold } from "../src/services/households/households.service.ts";
 import { assignSlot } from "../src/services/households/members.service.ts";
 
-const SEED_PASSWORD = "seed-password-change-me";
+import { env } from "../src/env.ts";
+
+/**
+ * Two accounts with a password that is printed in the README must never be
+ * created on a public origin by accident. In production the script refuses
+ * unless the operator says so explicitly — and then still insists on a
+ * password of their own instead of the published default.
+ */
+if (env.isProduction) {
+  if (process.env.ALLOW_SEED !== "1") {
+    console.error("[seed] refusing to run with NODE_ENV=production. Set ALLOW_SEED=1 if you really mean it.");
+    process.exit(1);
+  }
+  if (!process.env.SEED_PASSWORD || process.env.SEED_PASSWORD.length < 10) {
+    console.error("[seed] SEED_PASSWORD (>= 10 chars) is required in production — the default is public.");
+    process.exit(1);
+  }
+}
+
+const SEED_PASSWORD = process.env.SEED_PASSWORD ?? "seed-password-change-me";
 
 async function ensureUser(email: string, name: string): Promise<{ id: string; created: boolean }> {
   const existing = await findUserByEmail(db, email);

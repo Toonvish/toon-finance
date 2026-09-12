@@ -47,6 +47,16 @@ export const FORGOT_PASSWORD_EMAIL_RULE: RateLimitRule = { limit: 3, windowMs: 1
  */
 export const PASSWORD_RESET_RULE: RateLimitRule = { limit: 10, windowMs: 15 * 60_000 };
 
+/**
+ * `POST …/invites`, per USER: 10 per hour. Authenticated, but it mails an
+ * arbitrary address with the inviter's name in the body — an unmetered
+ * outbound-mail primitive for anyone with an account (claim invites even
+ * bypass `household_full`, so they can be re-issued without end).
+ */
+export const INVITE_RULE: RateLimitRule = { limit: 10, windowMs: 60 * 60_000 };
+/** `POST /api/households`, per USER: 5 per hour. Each one seeds 21 categories and a plan row the scheduler walks forever. */
+export const HOUSEHOLD_CREATE_RULE: RateLimitRule = { limit: 5, windowMs: 60 * 60_000 };
+
 const buckets = new Map<string, number[]>();
 /** Guards against unbounded growth on a hostile/busy instance. */
 const MAX_BUCKETS = 10_000;
@@ -107,10 +117,17 @@ export function resetRateLimits(key?: string): void {
  */
 export function clientIp(c: Context): string {
   if (env.trustProxy) {
+    // The LAST entry, not the first. The trusted proxy is the one hop we
+    // believe, and whatever it appended is the address it saw; the first
+    // entry is whatever the client chose to send. With the edge Caddy
+    // OVERWRITING the header (toon-edge's `header_up X-Forwarded-For
+    // {remote_host}`) both are the same value — and if that line is ever
+    // dropped there, "last" still yields the true peer while "first" would
+    // silently turn every rate limit into a client-controlled no-op.
     const forwarded = c.req.header("x-forwarded-for");
     if (forwarded) {
-      const first = forwarded.split(",")[0]?.trim();
-      if (first && first.length > 0) return first;
+      const last = forwarded.split(",").at(-1)?.trim();
+      if (last && last.length > 0) return last;
     }
     const direct = c.req.header("x-real-ip");
     if (direct && direct.length > 0) return direct;

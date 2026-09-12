@@ -2360,6 +2360,7 @@ zurück.
 | `server.error.internal` | Unerwarteter Fehler. Bitte versuch es später noch einmal. |
 | `server.error.requestFailed` | Die Anfrage ist fehlgeschlagen. |
 | `server.error.tooManyAttempts` | Zu viele Versuche. Bitte in {seconds} Sekunden erneut probieren. |
+| `server.error.originMismatch` | Diese Anfrage kam nicht aus der App und wurde abgelehnt. |
 | `server.auth.emailTaken` | Zu dieser E-Mail-Adresse gibt es bereits ein Konto. |
 | `server.auth.invalidJsonBody` | Der Anfrage-Body ist kein gültiges JSON. |
 | `server.auth.passwordRequired` | Bitte gib dein aktuelles Passwort ein. |
@@ -2368,6 +2369,7 @@ zurück.
 | `server.household.required` | Du gehörst noch zu keinem Haushalt. |
 | `server.household.full` | Dieser Haushalt hat bereits zwei Mitglieder. |
 | `server.household.memberHasLedger` | Zu dieser Person gibt es noch Buchungen. Sie müssen zuerst entfernt werden. |
+| `server.household.anchorCannotLeave` | Solange die zweite Person im Haushalt ist, kann die erste ihn nicht verlassen. |
 | `server.invite.invalid` | Diese Einladung ist ungültig oder bereits eingelöst. |
 | `server.invite.expired` | Diese Einladung ist abgelaufen. |
 | `server.transaction.amountZero` | Der Betrag darf nicht 0 sein. |
@@ -2412,6 +2414,8 @@ Auflösung vom Spezifischen zum Allgemeinen, wie im Referenz-Repo:
 | `server.zod.field.description.too_small` | Bitte beschreib die Buchung kurz. |
 | `server.zod.field.description.too_big` | Die Beschreibung ist zu lang (höchstens {maximum} Zeichen). |
 | `server.validation.periodFormat` | Bitte gib einen Monat im Format JJJJ-MM an. |
+| `server.validation.periodBounds` | Der Monat muss zwischen 2000-01 und 2100-12 liegen. |
+| `server.validation.noControlChars` | Der Name darf keine Steuerzeichen oder Zeilenumbrüche enthalten. |
 | `server.validation.amountNotZero` | Der Betrag darf nicht 0 sein. |
 | `server.validation.amountPositive` | Der Betrag muss größer als 0 sein. |
 | `server.validation.periodRange` | Das Ende darf nicht vor dem Beginn liegen. |

@@ -607,6 +607,52 @@ Die ersten sechzehn sind aus `toon-recipe` übernommen (dort teuer gelernt, hier
     meldet sich über `useQuickAddHostedHere()` als Host an, und alle drei Auslöser treten zurück.
     *Geteilter Code heißt nicht geteilter Zustand.*
 
+**Aus dem Security-Review (2026-09-12)**
+
+66. **`SameSite=Lax` schützt vor fremden SITES, nicht vor Geschwistern auf derselben.** Der toon-edge
+    hostet mehrere Apps unter einer registrierbaren Domain; ein Skript auf der Rezepte-Origin ist für den
+    Browser „same-site", und das Finanz-Cookie fährt mit. Deshalb `middleware/originGuard.ts` auf
+    `/api/*` für jede unsichere Methode (`Sec-Fetch-Site: cross-site|same-site` → 403; `Origin`-Host ≠
+    Request-Host → 403; **kein** `Origin` = kein Browser → durch, damit curl/README/Tests funktionieren)
+    — und `readJson` in `routes/auth.ts` verlangt `Content-Type: application/json`, weil
+    `Request.json()` sonst auch ein `text/plain`-Formular parst. Nur der Host wird verglichen, nie das
+    Schema: TLS endet am Edge, die API sieht `http://`.
+67. **`middleware/securityHeaders.ts` hasht beim Boot jedes inline `<script>` aus `dist/index.html`
+    in die CSP.** `script-src 'self' 'sha256-…'`, `style-src 'self'` OHNE `'unsafe-inline'`, `img-src
+    'self'`. Wer ein `<style>`, ein `style=""`-Attribut per `setAttribute`, ein `data:`-Bild oder ein
+    CDN einführt, bricht die App NUR im Container und NUR im Browser — `bun test` sieht es nie. Reacts
+    `style={{…}}` bleibt erlaubt (CSSOM). **Kein HSTS aus der App**: das gehört dem Edge
+    (`TOON_HSTS_MAX_AGE`), der für interne Namen bewusst 0 setzt.
+68. **Der Fixkostenplan nennt nur Mitglieder.** `payerId` (PATCH …/plan) und `personId` (incomes)
+    laufen durch `getMember()` — der FK beweist nur, dass die `users`-Zeile existiert, nicht, dass sie
+    in DIESEM Haushalt sitzt; ein Ex-Mitglied als Zahler hätte jede künftige Buchung getragen und
+    `otherMemberId()` einen beliebigen „anderen" gewählt. Einschalten (`enabled: true`) prüft den
+    gespeicherten Zahler ebenfalls.
+69. **Verlassen: Slot 1 geht nicht, solange Slot 2 sitzt** (409, `server.household.anchorCannotLeave`) —
+    sonst wirft `slot1UserId()` in jedem Ledger-Endpunkt des Verbliebenen einen 500. Der Zahler eines
+    **aktiven** Plans geht nicht (`member_has_ledger`); bei einem inaktiven Plan wandert `payerId` in
+    derselben Transaktion auf den Verbliebenen, die eigenen `incomes` werden gelöscht. „Ist Zahler"
+    allein darf NICHT blocken: `createHousehold` setzt den Owner als Default-Zahler.
+70. **`PeriodSchema` ist auf `2000-01 … 2100-12` begrenzt.** `0001-01` als `startPeriod` hätte den
+    Boot-Catch-up ~24 000 Perioden (à sechs Statements, in EINER Write-Transaktion, VOR dem ersten
+    Request) laufen lassen; `Date.UTC(1, …)` wäre zudem 1901.
+71. **LIKE-Metazeichen werden escaped** (`escapeLikePattern` + `ESCAPE '\'`): `q=%` fand jede Zeile.
+    `tags` max 20 pro Buchung, `tagIds` max 10, `q` max 100 — jeder neue Tag ist ein INSERT innerhalb
+    der Buchungs-Transaktion.
+72. **`claimPlaceholderUser` ist ein bedingtes UPDATE** (`WHERE password_hash IS NULL … RETURNING`),
+    kein Check-then-Write: zwei gleichzeitige Registrierungen über denselben Claim-Link hätten sonst
+    dieselbe `users`-Zeile nacheinander mit zwei Passwörtern beschrieben.
+73. **Idempotenz-Lesepfade filtern auf `household_id`.** Der Settlement-Replay lud die Zeile hinter einer
+    fremden `mutationId` ohne Haushaltsfilter; `peekMutationClaim` verlangt jetzt den Haushalt.
+    `accrual_runs.error` speichert nur noch `error.name` — die Drizzle-Meldung enthält das SQL MIT
+    Parametern und war beiden Mitgliedern über `GET …/plan/runs` lesbar.
+74. **Ops-Härtung**: `X-Forwarded-For` wird als LETZTER Eintrag gelesen (was der vertraute Proxy anhängt),
+    `SESSION_SECRET` mit `change-me…` wird in Produktion beim Boot abgelehnt, `seed.ts` verweigert
+    `NODE_ENV=production` ohne `ALLOW_SEED=1` + eigenes `SEED_PASSWORD`, Actions sind auf Commit-SHAs
+    gepinnt, der Container läuft mit `cap_drop: ALL` + `no-new-privileges`, `foreign_keys = ON` steht
+    explizit in den PRAGMAs, `POST …/invites` (mit Mail) und `POST /api/households` sind pro User
+    rate-limitiert. Ein 401 in der Web-App purgt den persistierten Cache wie ein Logout.
+
 ## Verifikations-Gates
 
 Alle vier müssen sauber sein, bevor irgendetwas „fertig" heißt:

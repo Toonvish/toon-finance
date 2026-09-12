@@ -33,6 +33,16 @@ export type DbLike = Database | Tx;
 export const transactionsSupported: boolean = !env.databaseUrl.includes(":memory:");
 
 /** Runs `work` inside a transaction wherever libSQL supports one (see above). */
+/**
+ * Escapes the LIKE metacharacters in a user-typed search term so `%` and `_`
+ * match themselves. Use together with `ESCAPE '\\'` in the query — a bare
+ * `like ${'%' + q + '%'}` lets `q = "%"` match every row, and a long run of
+ * `%_%_%` is a pattern the engine has to backtrack over.
+ */
+export function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, (char) => `\\${char}`);
+}
+
 export async function withTransaction<T>(db: Database, work: (tx: DbLike) => Promise<T>): Promise<T> {
   if (!transactionsSupported) return work(db);
   return db.transaction(async (tx) => work(tx));

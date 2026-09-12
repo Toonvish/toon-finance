@@ -62,9 +62,11 @@ services:
 
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is missing - see docker/env.example}
 
-      # Caddy sits in front and OVERWRITES X-Forwarded-For (see docker/Caddyfile).
-      # That overwrite is what makes trusting the header safe here; without it
-      # every rate limit would be bypassable by sending your own header.
+      # The toon-edge Caddy sits in front and OVERWRITES X-Forwarded-For (its
+      # shared snippet: `header_up X-Forwarded-For {remote_host}` — the file
+      # lives in the toon-edge repo, not here). That overwrite is what makes
+      # trusting the header safe; the API additionally reads the LAST hop, so
+      # even an appended header could not be spoofed by the client.
       TRUST_PROXY: "1"
 
       # --- mail ----------------------------------------------------------
@@ -105,6 +107,15 @@ services:
     # limit below the machine's RAM is what keeps a runaway request from taking
     # the Docker daemon with it.
     mem_limit: ${TOON_MEM_LIMIT:-512m}
+    # The process runs as `bun` (uid 1000, see the Dockerfile) and needs no
+    # capability at all: no privileged port, no chown at runtime, no raw
+    # sockets. Dropping them all and forbidding privilege escalation costs
+    # nothing here and turns a code-execution bug into a shell with nothing
+    # to escalate into. tini as PID 1 works without capabilities.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     logging: &logging
       driver: json-file
       options:

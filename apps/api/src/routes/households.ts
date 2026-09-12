@@ -32,6 +32,7 @@ import { onValidationError } from "../lib/validation.ts";
 import { requireHousehold } from "../middleware/household.ts";
 import { requireSession } from "../middleware/session.ts";
 import { acceptInvite, createInvite, listInvites, previewInvite, revokeInvite } from "../services/auth/invites.ts";
+import { HOUSEHOLD_CREATE_RULE, INVITE_RULE, enforceRateLimit } from "../services/auth/rateLimit.ts";
 import {
   createHousehold,
   getHouseholdResponse,
@@ -72,6 +73,7 @@ householdsRoutes.post(
   zValidator("json", CreateHouseholdRequestSchema, onValidationError),
   async (c) => {
     const user = requireUser(c);
+    enforceRateLimit(c, "household-create", user.id, HOUSEHOLD_CREATE_RULE);
     const body = c.req.valid("json");
     const householdId = await createHousehold(db, user.id, {
       name: body.name,
@@ -225,6 +227,8 @@ householdsRoutes.post(
     const household = requireHouseholdContext(c);
     const user = requireUser(c);
     const body = c.req.valid("json");
+    // Only the MAILING variant is metered — copying a link sends nothing.
+    if (body.email !== undefined) enforceRateLimit(c, "invite-mail", user.id, INVITE_RULE);
     const result = await createInvite(db, household.householdId, user.id, { email: body.email, claimsUserId: body.claimsUserId });
     return created(c, result);
   },
