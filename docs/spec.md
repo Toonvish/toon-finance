@@ -148,10 +148,10 @@ export const users = sqliteTable(
   "users",
   {
     id: text("id").primaryKey(),
-    email: text("email").notNull(),
-    emailNormalized: text("email_normalized").notNull(), // lower(trim(email)); die App schreibt sie
+    email: text("email"),                                // NULL nur für einen Platzhalter (s. u.)
+    emailNormalized: text("email_normalized"),           // lower(trim(email)); die App schreibt sie
     name: text("name").notNull(),
-    passwordHash: text("password_hash").notNull(),
+    passwordHash: text("password_hash"),                 // NULL nur für einen Platzhalter
     locale: text("locale", { enum: ["de", "en"] }).notNull().default("de"),
     createdAt: integer("created_at").notNull().$defaultFn(now),
     updatedAt: integer("updated_at").notNull().$defaultFn(now),
@@ -163,9 +163,19 @@ export const users = sqliteTable(
 `users_email_normalized_uidx` ist die **Fachregel** „eine Adresse, ein Konto" — durchgesetzt von der DB,
 nicht von einem read-modify-write, den zwei parallele Registrierungen verschränken könnten. `email`
 bleibt in der Schreibweise des Nutzers erhalten (Anzeige), `email_normalized` ist die Vergleichsachse;
-sie ist `.notNull()` **ohne** Drizzle-Default, damit `tsc` an jeder Insert-Stelle scheitert, die sie
-vergisst (Muster aus `reference-architecture.md` §3.1). `passwordHash` ist `notNull` — ohne OAuth gibt
-es kein Konto ohne Passwort.
+sie hat **keinen** Drizzle-Default, damit `tsc` an jeder Insert-Stelle scheitert, die sie vergisst
+(Muster aus `reference-architecture.md` §3.1).
+
+**Platzhalter.** Die drei Credential-Spalten sind nullable — **gemeinsam, nie einzeln**. Eine Zeile mit
+`email = email_normalized = password_hash = NULL` ist ein **Platzhalter**: eine Person, die das andere
+Mitglied nur mit Namen in den Haushalt gesetzt hat, damit das Kassenbuch sie sofort als `payer_id`
+nennen kann, ohne dass sie je ein Konto anlegen musste. `isPlaceholderUser(row)` (`password_hash IS
+NULL`) ist das eine Prädikat. Ein Platzhalter kann sich nicht anmelden (nichts zum Nachschlagen, nichts
+zu prüfen) und wird später über eine **Claim-Einladung** (§2.5, §3.5) **in place** zum Konto: dieselbe
+`id`, alle `payer_id`/`person_id` zeigen weiter auf dieselbe Person. SQLites Unique-Index behandelt
+NULLs als verschieden, also koexistieren beliebig viele Platzhalter unter
+`users_email_normalized_uidx`. Das ist **keine** zweite Auth-Methode (Entscheidung #4 bleibt): ein
+Platzhalter hat gar keine.
 
 ### 2.2 `sessions` — opake Session-IDs, der Cookie-Wert IST der Primärschlüssel
 
@@ -261,6 +271,8 @@ export const invites = sqliteTable(
     createdAt: integer("created_at").notNull().$defaultFn(now),
     acceptedAt: integer("accepted_at"),
     acceptedBy: text("accepted_by").references(() => users.id, { onDelete: "set null" }),
+    // Claim-Einladung: der Platzhalter (§2.1), den dieser Link zum Konto macht; sonst NULL
+    claimsUserId: text("claims_user_id").references(() => users.id, { onDelete: "cascade" }),
     // Ergebnis des EINEN Sendeversuchs, festgehalten für GET /invites (§3.5)
     mailDelivery: text("mail_delivery", { enum: ["sent", "not_configured", "failed"] })
       .notNull()
@@ -278,6 +290,12 @@ auch ein Timing-Kanal. `invites_household_status_idx` bedient „offene Einladun
 dem Haushalt-Screen. **Der Token steht im Klartext**, der Passwort-Reset-Token nur als SHA-256: *eine
 geleakte invites-Tabelle kostet eine Haushaltsmitgliedschaft, eine geleakte reset-Tabelle jedes Konto.*
 Die eingeladene E-Mail wird bewusst nicht erzwungen, sonst kann man einen Link nicht weiterleiten.
+
+`claims_user_id` macht aus einer Einladung eine **Claim-Einladung**: sie setzt niemanden auf einen
+Platz (der ist schon vom Platzhalter belegt), sondern schreibt beim Einlösen E-Mail + Passwort auf genau
+diese `users`-Zeile. Deshalb darf sie auch bei zwei Mitgliedern ausgestellt werden, und deshalb kann sie
+nur per **Registrierung** eingelöst werden — ein bestehendes Konto auf einen fremden Platz zu mergen
+(jede `payer_id` umzuhängen) ist kein Feature.
 
 ### 2.6 `categories` — stabile `slug`s, Label aus dem Katalog
 
@@ -732,6 +750,8 @@ export const ERROR_CODES = [
   "household_full",
   "household_required",
   "member_has_ledger",
+  "member_has_account",
+  "invite_claim_requires_register",
   // Ledger
   "transaction_amount_zero",
   "transaction_generated",
@@ -762,7 +782,9 @@ Bedeutung der nicht selbsterklärenden Codes:
 | `invite_expired` | 409 | Token abgelaufen; die Zeile wird dabei auf `status: "expired"` gesetzt |
 | `household_full` | 409 | beide `member_slot` belegt |
 | `household_required` | 409 | der Nutzer hat noch keinen Haushalt (Bootstrap-Zustand) |
-| `member_has_ledger` | 409 | Austritt/Entfernen, während Buchungen dieser Person existieren |
+| `member_has_ledger` | 409 | Austritt/Entfernen, während Buchungen dieser Person existieren (beim Platzhalter auch: der Plan nennt ihn als Zahler) |
+| `member_has_account` | 409 | Claim-Einladung für ein Mitglied, das schon ein Konto hat — oder ein zweiter Claim auf einen bereits beanspruchten Platz |
+| `invite_claim_requires_register` | 409 | ein angemeldetes Konto versucht, eine Claim-Einladung anzunehmen; sie wird nur per Registrierung eingelöst |
 | `transaction_amount_zero` | 422 | `amountCents === 0`; negative Beträge sind **erlaubt** |
 | `transaction_generated` | 409 | `PATCH`/`DELETE` auf `origin ≠ 'manual'` |
 | `balance_stale` | 409 | `expectedBalanceCents` passt nicht mehr; Body trägt `details.currentBalanceCents` |
@@ -861,25 +883,29 @@ sonst frisst der Parameter sie.
 | GET | `/api/households/:householdId` | household | – | `HouseholdDetailResponse` | 200, 401, 403, 404 |
 | PATCH | `/api/households/:householdId` | household | `UpdateHouseholdRequest` | `HouseholdResponse` | 200, 403, 404, 422 |
 | GET | `/api/households/:householdId/members` | household | – | `MemberListResponse` | 200, 403, 404 |
-| PATCH | `/api/households/:householdId/members/:userId` | household (nur man selbst) | `UpdateMemberRequest` | `MemberResponse` | 200, 403, 404, 422 |
-| DELETE | `/api/households/:householdId/members/:userId` | household (nur man selbst) | – | – | 204, 403, 404, 409 `member_has_ledger` |
+| POST | `/api/households/:householdId/members` | household | `CreatePlaceholderMemberRequest` | `MemberResponse` | 201, 403, 404, 409 `household_full`, 422 |
+| PATCH | `/api/households/:householdId/members/:userId` | household (man selbst oder der Platzhalter) | `UpdateMemberRequest` | `MemberResponse` | 200, 403, 404, 422 |
+| DELETE | `/api/households/:householdId/members/:userId` | household (man selbst oder der Platzhalter) | – | – | 204, 403, 404, 409 `member_has_ledger` |
 | GET | `/api/households/:householdId/invites` | household | – | `InviteListResponse` | 200, 403, 404 |
-| POST | `/api/households/:householdId/invites` | household | `CreateInviteRequest` | `InviteResponse` | 201, 403, 404, 409 `household_full`, 422 |
+| POST | `/api/households/:householdId/invites` | household | `CreateInviteRequest` | `InviteResponse` | 201, 403, 404, 409 `household_full`, 409 `member_has_account`, 422 |
 | DELETE | `/api/households/:householdId/invites/:inviteId` | household | – | – | 204, 403, 404 |
 
 ```ts
 CreateHouseholdRequest = { name: string; displayName?: string }
 UpdateHouseholdRequest = { name?: string; defaultLocale?: "de" | "en" }
 UpdateMemberRequest    = { displayName: string }
-CreateInviteRequest    = { email?: string }
+CreatePlaceholderMemberRequest = { displayName: string }
+CreateInviteRequest    = { email?: string; claimsUserId?: string }
 AcceptInviteRequest    = { token: string; displayName?: string }
 
-MemberResponse         = { userId, displayName, memberSlot: 1 | 2, name, email, joinedAt }
+MemberResponse         = { userId, displayName, memberSlot: 1 | 2, name, email: string | null,
+                           hasAccount: boolean, joinedAt }
 MemberListResponse     = { items: MemberResponse[] }
 HouseholdResponse      = { id, name, defaultLocale, memberCount, createdAt, updatedAt }
 HouseholdDetailResponse= { household: HouseholdResponse; members: MemberResponse[]; viewerSlot: 1 | 2 }
-InvitePreviewResponse  = { householdName: string; invitedByName: string; expiresAt: string }
-InviteResponse         = { id, token, inviteUrl, email, status, expiresAt, createdAt,
+InvitePreviewResponse  = { householdName: string; invitedByName: string; expiresAt: string;
+                           claimsDisplayName: string | null }
+InviteResponse         = { id, token, inviteUrl, email, claimsUserId: string | null, status, expiresAt, createdAt,
                            mailDelivery: "sent" | "not_configured" | "failed" }
 AcceptInviteResponse   = { household: HouseholdResponse; memberSlot: 1 | 2; alreadyMember: boolean }
 ```
@@ -905,6 +931,22 @@ Anmerkungen
 * `DELETE /members/:userId` ist der Austritt. Er ist nur für einen selbst erlaubt (bei zwei Personen ist
   „den anderen rauswerfen" keine Funktion, sondern ein Streit) und scheitert mit `member_has_ledger`,
   solange Buchungen mit dieser `payer_id` existieren — der Saldo hinge sonst an einem Geist.
+* **Platzhalter** (§2.1). `POST /members` setzt eine Person **ohne Konto** auf den freien Platz — nur ein
+  Anzeigename, dieselbe `household_full`-Regel. Weil sie sich nicht anmelden kann, darf das andere
+  Mitglied sie umbenennen und entfernen (`PATCH`/`DELETE` erlauben „man selbst **oder** der
+  Platzhalter", alles andere bleibt 403). Entfernen löscht die `users`-Zeile mit (samt ihren `incomes`
+  und offenen Claim-Einladungen) und scheitert mit `member_has_ledger`, wenn eine Buchung oder der
+  Fixkostenplan sie als Zahler nennt. `MemberResponse.hasAccount` ist die Anzeigeachse; `email` ist
+  dann `null`.
+* **Claim-Einladung.** `POST /invites { claimsUserId }` stellt den Link aus, der den Platzhalter zum
+  Konto macht — erlaubt bei zwei Mitgliedern (der Platz ist ja seiner), `409 member_has_account` für
+  ein Mitglied mit Konto, 404 für einen Fremden. Eingelöst wird sie **nur über `POST /api/auth/register
+  { inviteToken }`**: statt eines neuen Nutzers bekommt der Platzhalter E-Mail, Name und Passwort **in
+  place** (gleiche `id`, jede `payer_id` bleibt gültig), die Einladung wird `accepted` mit `acceptedBy =
+  claimsUserId`, und die Session gehört diesem Konto. `POST /invites/accept` aus einem bestehenden Konto
+  antwortet `409 invite_claim_requires_register`; die Web-App bietet dort nur „Abmelden" an. Die
+  Vorschau trägt `claimsDisplayName`, damit die Landing-Page sagt, **als wer** man eingetragen wurde, und
+  `/register` den Namen vorbelegt.
 * `POST /api/households` existiert für den seltenen Fall, dass jemand seinen Haushalt gelöscht hat oder
   über eine Einladung registriert wurde und später einen eigenen braucht. Es gibt **keinen**
   Haushalts-Umschalter in der UI; `MeResponse.activeHouseholdId` ist der erste (und praktisch einzige)
@@ -1466,8 +1508,13 @@ Kategorie danach nicht mehr mit der Oberflächensprache wechselt.
 Name des Haushalts (editierbar), die beiden Mitglieder mit Anzeigename, Slot und Beitrittsdatum, der
 eigene Anzeigename als Feld. Ist ein Slot frei: die Einladungs-Karte mit „Einladung erstellen",
 danach der Link zum Kopieren **plus** eine ehrliche Statuszeile aus `mailDelivery`
-(`settings.household.mailSent` / `.mailNotConfigured` / `.mailFailed`). Ist der Haushalt voll, steht
-dort `settings.household.full`. Ganz unten „Haushalt verlassen" mit `ConfirmDialog`; scheitert es mit
+(`settings.household.mailSent` / `.mailNotConfigured` / `.mailFailed`). Unter dem Einladungsformular,
+durch eine Linie getrennt, „Ohne Konto hinzufügen": ein Anzeigename, `POST /members`, und der Platz ist
+belegt. Sitzt dort ein **Platzhalter**, trägt seine Zeile in der Mitgliederliste das Badge
+`placeholderBadge` und einen Overflow-Trigger (Umbenennen · Person entfernen — bei `member_has_ledger`
+bleibt der `ConfirmDialog` offen und zeigt den Fehler), und die Einladungs-Karte heißt „Konto für
+{name} verknüpfen": derselbe Link-Flow, nur mit `claimsUserId`. Ist der Haushalt voll (zwei Konten),
+steht dort `settings.household.full`. Ganz unten „Haushalt verlassen" mit `ConfirmDialog`; scheitert es mit
 `member_has_ledger`, erklärt der Fehlertext, dass zuerst die Buchungen dieser Person weg müssen.
 
 ### 4.9 `/settings` — Profil (Tab 4)
@@ -1957,6 +2004,7 @@ Verbindliche Regeln:
 | `auth.register.passwordHint` | Mindestens 10 Zeichen. |
 | `auth.register.submit` | Konto erstellen |
 | `auth.register.toLogin` | Du hast schon ein Konto? Anmelden |
+| `auth.register.claimHint` | Du erstellst das Konto für „{display}" im Haushalt „{household}". |
 | `auth.register.inviteHint` | Du trittst dem Haushalt „{household}" bei. |
 | `auth.forgot.title` | Passwort zurücksetzen |
 | `auth.forgot.subtitle` | Wir schicken dir einen Link an deine E-Mail-Adresse. |
@@ -1975,6 +2023,10 @@ Verbindliche Regeln:
 | `auth.invite.expired` | Diese Einladung ist abgelaufen. Bitte lass dir eine neue schicken. |
 | `auth.invite.full` | Dieser Haushalt hat bereits zwei Mitglieder. |
 | `auth.invite.alreadyMember` | Du bist bereits Mitglied dieses Haushalts. |
+| `auth.invite.claimSubtitle` | {name} hat dich als „{display}" im Haushalt „{household}" eingetragen. Erstelle dein Konto, um dich anzumelden. |
+| `auth.invite.claimCreateAccount` | Konto erstellen |
+| `auth.invite.claimLoggedIn` | Dieser Link legt das Konto für eine bereits eingetragene Person an. Melde dich ab, um ihn zu nutzen. |
+| `auth.invite.claimLogout` | Abmelden |
 | `auth.logout` | Abmelden |
 | `auth.displayName` | Anzeigename im Haushalt |
 
@@ -2253,7 +2305,7 @@ als schlichter Inhalt behandelt — beim Lesen nie neu übersetzt.
 | `settings.household.displayName` | Anzeigename |
 | `settings.household.invite` | Zweite Person einladen |
 | `settings.household.inviteCreate` | Einladung erstellen |
-| `settings.household.inviteEmail` | E-Mail-Adresse (optional) |
+| `settings.household.inviteEmail` | E-Mail-Adresse — der Zusatz „(optional)" kommt aus `common.optional` über `Label optional`, nicht aus diesem Text |
 | `settings.household.inviteLink` | Einladungslink |
 | `settings.household.inviteLinkHint` | Der Link gilt 14 Tage. Wer ihn hat, kann beitreten. |
 | `settings.household.inviteRevoke` | Einladung zurückziehen |
@@ -2261,6 +2313,18 @@ als schlichter Inhalt behandelt — beim Lesen nie neu übersetzt.
 | `settings.household.mailNotConfigured` | Es ist kein Mailversand eingerichtet — gib den Link von Hand weiter. |
 | `settings.household.mailFailed` | Der Versand ist fehlgeschlagen. Der Link gilt trotzdem — gib ihn von Hand weiter. |
 | `settings.household.full` | Dieser Haushalt ist vollständig. Mehr als zwei Personen sind nicht vorgesehen. |
+| `settings.household.placeholderTitle` | Ohne Konto hinzufügen |
+| `settings.household.placeholderDescription` | Trag die zweite Person nur mit Namen ein. Du kannst sofort für sie buchen; ein Konto verknüpfst du später. |
+| `settings.household.placeholderCreate` | Person eintragen |
+| `settings.household.placeholderBadge` | ohne Konto |
+| `settings.household.placeholderHint` | Kann sich noch nicht anmelden. |
+| `settings.household.placeholderRename` | Umbenennen |
+| `settings.household.placeholderRemove` | Person entfernen |
+| `settings.household.placeholderRemoveConfirm` | „{name}" wirklich entfernen? Das geht nur, solange es keine Buchungen für diese Person gibt. |
+| `settings.household.linkAccount` | Konto für {name} verknüpfen |
+| `settings.household.linkAccountHint` | Der Link legt das Konto für diesen Platz an. Alle bisherigen Buchungen bleiben dieser Person zugeordnet. |
+| `settings.household.linkAccountCreate` | Link zum Verknüpfen erstellen |
+| `settings.household.linkAccountLinkHint` | Der Link gilt 14 Tage. Wer ihn öffnet, erstellt damit das Konto für diesen Platz. |
 | `settings.household.leave` | Haushalt verlassen |
 | `settings.household.leaveConfirm` | Wirklich verlassen? Du siehst danach keine Buchungen mehr. |
 | `settings.language.title` | Sprache |

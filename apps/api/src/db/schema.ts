@@ -40,13 +40,22 @@ export const users = sqliteTable(
   "users",
   {
     id: text("id").primaryKey(),
-    email: text("email").notNull(),
+    // NULL for a PLACEHOLDER member: a person seated in a household without an
+    // account behind them (added by the other member, so the ledger can name
+    // them as payer before they ever log in). All three credential columns are
+    // null together, never one of them — `isPlaceholderUser()` is the one
+    // predicate. Such a row cannot log in (no email to look up, no hash to
+    // verify) and is claimed later through a claim invite, which fills all
+    // three in place so every `payer_id` keeps pointing at the same person.
+    email: text("email"),
     // lower(trim(email)) — the app writes this, never a DB trigger, so a
     // parallel registration racing the same address collides on the unique
-    // index below instead of two read-modify-writes interleaving.
-    emailNormalized: text("email_normalized").notNull(),
+    // index below instead of two read-modify-writes interleaving. SQLite's
+    // unique index treats NULLs as distinct, so any number of placeholders
+    // coexist under it.
+    emailNormalized: text("email_normalized"),
     name: text("name").notNull(),
-    passwordHash: text("password_hash").notNull(),
+    passwordHash: text("password_hash"),
     locale: text("locale", { enum: ["de", "en"] }).notNull().default("de"),
     createdAt: integer("created_at").notNull().$defaultFn(now),
     updatedAt: integer("updated_at").notNull().$defaultFn(now),
@@ -146,6 +155,11 @@ export const invites = sqliteTable(
     createdAt: integer("created_at").notNull().$defaultFn(now),
     acceptedAt: integer("accepted_at"),
     acceptedBy: text("accepted_by").references(() => users.id, { onDelete: "set null" }),
+    // Set on a CLAIM invite: the placeholder user this link turns into a real
+    // account. Redeeming it never seats anyone — the seat is already taken by
+    // the placeholder — it writes email + password onto that very row. A
+    // plain invite has null here.
+    claimsUserId: text("claims_user_id").references(() => users.id, { onDelete: "cascade" }),
     // What actually happened to the invite mail (docs/spec.md §3.5: the UI must
     // never render `not_configured`/`failed` as success). PERSISTED because the
     // send happens once, after the commit, and `GET .../invites` is re-read

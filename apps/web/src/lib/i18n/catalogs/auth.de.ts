@@ -19,6 +19,7 @@ export const authDe = {
   "auth.register.submit": "Konto erstellen",
   "auth.register.toLogin": "Du hast schon ein Konto? Anmelden",
   "auth.register.inviteHint": 'Du trittst dem Haushalt „{household}" bei.',
+  "auth.register.claimHint": 'Du erstellst das Konto für „{display}" im Haushalt „{household}".',
   "auth.forgot.title": "Passwort zurücksetzen",
   "auth.forgot.subtitle": "Wir schicken dir einen Link an deine E-Mail-Adresse.",
   "auth.forgot.submit": "Link anfordern",
@@ -36,6 +37,11 @@ export const authDe = {
   "auth.invite.expired": "Diese Einladung ist abgelaufen. Bitte lass dir eine neue schicken.",
   "auth.invite.full": "Dieser Haushalt hat bereits zwei Mitglieder.",
   "auth.invite.alreadyMember": "Du bist bereits Mitglied dieses Haushalts.",
+  "auth.invite.claimSubtitle": '{name} hat dich als „{display}" im Haushalt „{household}" eingetragen. Erstelle dein Konto, um dich anzumelden.',
+  "auth.invite.claimCreateAccount": "Konto erstellen",
+  "auth.invite.claimLoggedIn":
+    "Dieser Link legt das Konto für eine bereits eingetragene Person an. Melde dich ab, um ihn zu nutzen.",
+  "auth.invite.claimLogout": "Abmelden",
   "auth.logout": "Abmelden",
   "auth.displayName": "Anzeigename im Haushalt",
 } as const satisfies NamespaceCatalog<"auth">;

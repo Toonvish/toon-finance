@@ -8,17 +8,18 @@
  * install may have no MAIL_TRANSPORT at all, and a provider outage must not
  * stop someone from inviting their partner over WhatsApp instead).
  */
-import type { AcceptInviteResponse, InviteListResponse, InviteResponse, Locale } from "@toon/shared";
+import type { AcceptInviteResponse, InviteListResponse, InvitePreviewResponse, InviteResponse, Locale } from "@toon/shared";
 import { isLocale } from "@toon/shared";
 import { and, desc, eq } from "drizzle-orm";
 import type { Database } from "../../db/client.ts";
-import { type InviteRow, households, invites, users } from "../../db/schema.ts";
+import { type InviteRow, householdMembers, households, invites, users } from "../../db/schema.ts";
 import { env } from "../../env.ts";
 import { ApiError } from "../../lib/errors.ts";
 import { nowMs } from "../../lib/clock.ts";
 import { toIso } from "../../lib/http.ts";
 import { getHouseholdResponse, memberCountOf } from "../households/households.service.ts";
-import { assignSlot, getMember } from "../households/members.service.ts";
+import { assignSlot, getMember, isPlaceholderMember } from "../households/members.service.ts";
+import { claimPlaceholderUser } from "./users.service.ts";
 import { inviteMail, mailDeliveryOf, trySendMail } from "../mail/index.ts";
 
 /** Invite links are valid for 14 days (docs/spec.md §3.5). */
@@ -43,11 +44,18 @@ function toInviteResponse(row: InviteRow, mailDelivery: InviteResponse["mailDeli
     token: row.token,
     inviteUrl: buildInviteUrl(row.token),
     email: row.email,
+    claimsUserId: row.claimsUserId,
     status: row.status,
     expiresAt: toIso(row.expiresAt),
     createdAt: toIso(row.createdAt),
     mailDelivery,
   };
+}
+
+export interface CreateInviteInput {
+  email: string | undefined;
+  /** Placeholder member this link hands over — see `CreateInviteRequest.claimsUserId`. */
+  claimsUserId: string | undefined;
 }
 
 /**
@@ -57,15 +65,29 @@ function toInviteResponse(row: InviteRow, mailDelivery: InviteResponse["mailDeli
  * older pending invite of the same household is revoked first: a household
  * has AT MOST ONE open invite, and a second one is the expected "send it
  * again" path, not an error.
+ *
+ * A CLAIM invite (`claimsUserId`) is the exception to `household_full`: the
+ * seat it concerns is already taken, by the placeholder it hands over. It is
+ * refused with `404` for a stranger to the household and with `409
+ * member_has_account` for a member who already has one — a link that could
+ * overwrite a real account's password must not exist even for a second.
  */
 export async function createInvite(
   db: Database,
   householdId: string,
   invitedBy: string,
-  email: string | undefined,
+  input: CreateInviteInput,
 ): Promise<InviteResponse> {
-  const memberCount = await memberCountOf(db, householdId);
-  if (memberCount >= 2) throw ApiError.conflict("household_full", "server.household.full");
+  const { email, claimsUserId } = input;
+  if (claimsUserId !== undefined) {
+    await getMember(db, householdId, claimsUserId);
+    if (!(await isPlaceholderMember(db, householdId, claimsUserId))) {
+      throw ApiError.conflict("member_has_account", "server.household.memberHasAccount");
+    }
+  } else {
+    const memberCount = await memberCountOf(db, householdId);
+    if (memberCount >= 2) throw ApiError.conflict("household_full", "server.household.full");
+  }
 
   const timestamp = nowMs();
   const id = crypto.randomUUID();
@@ -81,6 +103,7 @@ export async function createInvite(
     householdId,
     token,
     email: email ?? null,
+    claimsUserId: claimsUserId ?? null,
     invitedBy,
     status: "pending",
     expiresAt: timestamp + INVITE_TTL_MS,
@@ -164,10 +187,7 @@ export async function loadRedeemableInvite(database: Database, token: string, re
 }
 
 /** Public landing-page preview ("Du wurdest zum Haushalt X eingeladen"). */
-export async function previewInvite(
-  db: Database,
-  token: string,
-): Promise<{ householdName: string; invitedByName: string; expiresAt: string }> {
+export async function previewInvite(db: Database, token: string): Promise<InvitePreviewResponse> {
   const invite = await loadRedeemableInvite(db, token);
   const [row] = await db
     .select({ householdName: households.name, invitedByName: users.name })
@@ -177,7 +197,22 @@ export async function previewInvite(
     .where(eq(invites.id, invite.id))
     .limit(1);
   if (!row) throw new ApiError(404, "invite_invalid", "server.invite.invalid");
-  return { householdName: row.householdName, invitedByName: row.invitedByName, expiresAt: toIso(invite.expiresAt) };
+
+  let claimsDisplayName: string | null = null;
+  if (invite.claimsUserId !== null) {
+    const [member] = await db
+      .select({ displayName: householdMembers.displayName })
+      .from(householdMembers)
+      .where(and(eq(householdMembers.householdId, invite.householdId), eq(householdMembers.userId, invite.claimsUserId)))
+      .limit(1);
+    claimsDisplayName = member?.displayName ?? null;
+  }
+  return {
+    householdName: row.householdName,
+    invitedByName: row.invitedByName,
+    expiresAt: toIso(invite.expiresAt),
+    claimsDisplayName,
+  };
 }
 
 /**
@@ -193,6 +228,14 @@ export async function acceptInvite(
 ): Promise<AcceptInviteResponse> {
   const invite = await loadRedeemableInvite(db, token, userId);
   const now = nowMs();
+
+  // A claim invite is redeemed by REGISTERING onto the placeholder
+  // (`claimInvite`), never by an existing account: the seat is taken, and
+  // merging two user ids across every payer_id is not a feature. The one
+  // account allowed through is the claimed row itself, replaying its accept.
+  if (invite.claimsUserId !== null && invite.claimsUserId !== userId) {
+    throw ApiError.conflict("invite_claim_requires_register", "server.invite.claimRequiresRegister");
+  }
 
   const existing = await getMember(db, invite.householdId, userId).catch(() => undefined);
 
@@ -211,6 +254,32 @@ export async function acceptInvite(
   await db.update(invites).set({ status: "accepted", acceptedBy: userId, acceptedAt: now }).where(eq(invites.id, invite.id));
 
   return { household: await getHouseholdResponse(db, invite.householdId), memberSlot, alreadyMember: false };
+}
+
+export interface ClaimInviteInput {
+  email: string;
+  name: string;
+  passwordHash: string;
+}
+
+/**
+ * Redeems a CLAIM invite: writes credentials onto the placeholder behind
+ * `token` and marks the invite accepted by that very user id — so a replay
+ * of the register request hits `loadRedeemableInvite`'s `redeemerId`
+ * allowance … except a placeholder has no session to replay from, so in
+ * practice the second attempt sees `member_has_account` from
+ * `claimPlaceholderUser`, which is the honest answer. Returns the claimed
+ * user's id; the caller starts the session. Throws `invite_invalid` for a
+ * token that is not a claim invite — `register` decides between the two paths
+ * by reading `claimsUserId` first.
+ */
+export async function claimInvite(db: Database, token: string, input: ClaimInviteInput): Promise<string> {
+  const invite = await loadRedeemableInvite(db, token);
+  if (invite.claimsUserId === null) throw new ApiError(404, "invite_invalid", "server.invite.invalid");
+  const userId = invite.claimsUserId;
+  await claimPlaceholderUser(db, userId, input);
+  await db.update(invites).set({ status: "accepted", acceptedBy: userId, acceptedAt: nowMs() }).where(eq(invites.id, invite.id));
+  return userId;
 }
 
 /** Paginated-in-shape invite list (no pagination params in the contract — a household has very few). */

@@ -24,7 +24,7 @@ export const settingsEn: LocaleCatalog<SettingsCatalog> = {
   "settings.household.displayName": "Display name",
   "settings.household.invite": "Invite second person",
   "settings.household.inviteCreate": "Create invite",
-  "settings.household.inviteEmail": "Email address (optional)",
+  "settings.household.inviteEmail": "Email address",
   "settings.household.inviteLink": "Invite link",
   "settings.household.inviteLinkHint": "The link is valid for 14 days. Whoever has it can join.",
   "settings.household.inviteRevoke": "Revoke invite",
@@ -32,6 +32,22 @@ export const settingsEn: LocaleCatalog<SettingsCatalog> = {
   "settings.household.mailNotConfigured": "No mail delivery is configured — share the link by hand.",
   "settings.household.mailFailed": "Sending failed. The link is still valid — share it by hand.",
   "settings.household.full": "This household is full. More than two people is not supported.",
+  "settings.household.placeholderTitle": "Add without an account",
+  "settings.household.placeholderDescription":
+    "Enter the second person by name only. You can book for them right away and link an account later.",
+  "settings.household.placeholderCreate": "Add person",
+  "settings.household.placeholderBadge": "no account",
+  "settings.household.placeholderHint": "Cannot sign in yet.",
+  "settings.household.placeholderRename": "Rename",
+  "settings.household.placeholderRemove": "Remove person",
+  "settings.household.placeholderRemoveConfirm":
+    'Really remove "{name}"? This only works while there are no transactions for this person.',
+  "settings.household.linkAccount": "Link an account for {name}",
+  "settings.household.linkAccountHint":
+    "The link creates the account for this seat. All existing transactions stay with this person.",
+  "settings.household.linkAccountCreate": "Create link",
+  "settings.household.linkAccountLinkHint":
+    "The link is valid for 14 days. Whoever opens it creates the account for this seat.",
   "settings.household.leave": "Leave household",
   "settings.household.leaveConfirm": "Really leave? You will no longer see any transactions afterwards.",
   "settings.language.title": "Language",

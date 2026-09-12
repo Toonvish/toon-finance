@@ -20,7 +20,20 @@ export type UpdateHouseholdRequest = z.infer<typeof UpdateHouseholdRequestSchema
 export const UpdateMemberRequestSchema = z.object({ displayName: DisplayNameSchema });
 export type UpdateMemberRequest = z.infer<typeof UpdateMemberRequestSchema>;
 
-export const CreateInviteRequestSchema = z.object({ email: EmailSchema.optional() });
+/** `POST /members` — seats a PLACEHOLDER (a person without an account) in the free slot. */
+export const CreatePlaceholderMemberRequestSchema = z.object({ displayName: DisplayNameSchema });
+export type CreatePlaceholderMemberRequest = z.infer<typeof CreatePlaceholderMemberRequestSchema>;
+
+export const CreateInviteRequestSchema = z.object({
+  email: EmailSchema.optional(),
+  /**
+   * Present for a CLAIM invite: the placeholder member this link lets someone
+   * turn into their own account. Allowed at two members (the seat is the
+   * placeholder's), refused with `member_has_account` for a member who already
+   * has one.
+   */
+  claimsUserId: IdSchema.optional(),
+});
 export type CreateInviteRequest = z.infer<typeof CreateInviteRequestSchema>;
 
 export const AcceptInviteRequestSchema = z.object({
@@ -47,7 +60,9 @@ export const MemberResponseSchema = z.object({
   displayName: z.string(),
   memberSlot: MemberSlotSchema,
   name: z.string(),
-  email: z.string(),
+  /** `null` for a placeholder — there is no account behind this seat (yet). */
+  email: z.string().nullable(),
+  hasAccount: z.boolean(),
   joinedAt: IsoDateSchema,
 });
 export type MemberResponse = z.infer<typeof MemberResponseSchema>;
@@ -66,6 +81,8 @@ export const InvitePreviewResponseSchema = z.object({
   householdName: z.string(),
   invitedByName: z.string(),
   expiresAt: IsoDateSchema,
+  /** Display name of the placeholder this CLAIM invite hands over; `null` for a plain invite. */
+  claimsDisplayName: z.string().nullable(),
 });
 export type InvitePreviewResponse = z.infer<typeof InvitePreviewResponseSchema>;
 
@@ -74,6 +91,7 @@ export const InviteResponseSchema = z.object({
   token: z.string(),
   inviteUrl: z.string(),
   email: z.string().nullable(),
+  claimsUserId: IdSchema.nullable(),
   status: InviteStatusSchema,
   expiresAt: IsoDateSchema,
   createdAt: IsoDateSchema,

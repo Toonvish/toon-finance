@@ -31,10 +31,13 @@ export const serverEn: LocaleCatalog<ServerCatalog> = {
   "server.household.required": "You don't belong to a household yet.",
   "server.household.full": "This household already has two members.",
   "server.household.memberHasLedger": "There are still transactions for this person. Remove them first.",
+  "server.household.memberHasAccount": "This person already has an account of their own.",
 
   /* -------------------------------- invite --------------------------------- */
   "server.invite.invalid": "This invite is invalid or has already been redeemed.",
   "server.invite.expired": "This invite has expired.",
+  "server.invite.claimRequiresRegister":
+    "This link creates the account for a person who is already listed. Sign out and use it to create a new account.",
 
   /* ----------------------------- transaction -------------------------------- */
   "server.transaction.amountZero": "The amount must not be 0.",

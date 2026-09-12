@@ -33,10 +33,13 @@ export const serverDe = {
   "server.household.required": "Du gehörst noch zu keinem Haushalt.",
   "server.household.full": "Dieser Haushalt hat bereits zwei Mitglieder.",
   "server.household.memberHasLedger": "Zu dieser Person gibt es noch Buchungen. Sie müssen zuerst entfernt werden.",
+  "server.household.memberHasAccount": "Diese Person hat bereits ein eigenes Konto.",
 
   /* -------------------------------- invite --------------------------------- */
   "server.invite.invalid": "Diese Einladung ist ungültig oder bereits eingelöst.",
   "server.invite.expired": "Diese Einladung ist abgelaufen.",
+  "server.invite.claimRequiresRegister":
+    "Dieser Link legt das Konto für eine bereits eingetragene Person an. Melde dich ab und erstelle damit ein neues Konto.",
 
   /* ----------------------------- transaction -------------------------------- */
   "server.transaction.amountZero": "Der Betrag darf nicht 0 sein.",

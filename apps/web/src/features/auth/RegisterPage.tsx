@@ -54,6 +54,13 @@ export function RegisterPage() {
     if (!isLoading && isAuthenticated) goTo(next, { replace: true });
   }, [isLoading, isAuthenticated, next, goTo]);
 
+  // A claim invite already knows what the household calls this person — offer
+  // that as the account name, but only while the field is still untouched.
+  const claimsDisplayName = invitePreview.data?.claimsDisplayName ?? null;
+  useEffect(() => {
+    if (claimsDisplayName !== null) setName((current) => (current.length === 0 ? claimsDisplayName : current));
+  }, [claimsDisplayName]);
+
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const result = validate(RegisterRequestSchema, {
@@ -77,7 +84,12 @@ export function RegisterPage() {
     <AuthCard title={t("auth.register.title")} subtitle={t("auth.register.subtitle")}>
       {inviteToken && invitePreview.data ? (
         <p className="mb-4 rounded-card border border-brand/30 bg-brand-soft p-3 text-sm text-brand-soft-fg">
-          {t("auth.register.inviteHint", { household: invitePreview.data.householdName })}
+          {invitePreview.data.claimsDisplayName !== null
+            ? t("auth.register.claimHint", {
+                display: invitePreview.data.claimsDisplayName,
+                household: invitePreview.data.householdName,
+              })
+            : t("auth.register.inviteHint", { household: invitePreview.data.householdName })}
         </p>
       ) : null}
 

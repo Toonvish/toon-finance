@@ -2,12 +2,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   CreateHouseholdRequest,
   CreateInviteRequest,
+  CreatePlaceholderMemberRequest,
   UpdateHouseholdRequest,
   UpdateMemberRequest,
 } from "@toon/shared";
 import {
   createHousehold,
   createHouseholdInvite,
+  createPlaceholderMember,
   leaveHousehold,
   revokeHouseholdInvite,
   updateHousehold,
@@ -63,6 +65,47 @@ export function useUpdateMemberDisplayName(householdId: string, userId: string) 
     onSuccess: () => {
       void invalidate.members(queryClient, householdId);
       void invalidate.householdDetail(queryClient, householdId);
+    },
+  });
+}
+
+/**
+ * Seats a placeholder in the free slot. Invalidates `me` too: `memberCount`
+ * travels in `MeResponse.households`, and the capture flow's "invite the
+ * second person first" empty state reads the OTHER member from the household
+ * detail — both must learn about the new seat at once.
+ */
+export function useAddPlaceholderMember(householdId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreatePlaceholderMemberRequest) => createPlaceholderMember(householdId, body),
+    onSuccess: () => {
+      void invalidate.me(queryClient);
+      void invalidate.household(queryClient, householdId);
+    },
+  });
+}
+
+/** Renames the PLACEHOLDER (the API allows it for the other member) — `userId` is the placeholder's. */
+export function useRenamePlaceholderMember(householdId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, displayName }: { userId: string; displayName: string }) =>
+      updateMemberDisplayName(householdId, userId, { displayName }),
+    onSuccess: () => {
+      void invalidate.household(queryClient, householdId);
+    },
+  });
+}
+
+/** Removes the PLACEHOLDER and its user row. 409 `member_has_ledger` while any booking names them. */
+export function useRemovePlaceholderMember(householdId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: string) => leaveHousehold(householdId, userId),
+    onSuccess: () => {
+      void invalidate.me(queryClient);
+      void invalidate.household(queryClient, householdId);
     },
   });
 }

@@ -5,15 +5,15 @@
 import type { MemberResponse } from "@toon/shared";
 import { and, eq } from "drizzle-orm";
 import type { Database } from "../../db/client.ts";
-import { householdMembers, transactions, users } from "../../db/schema.ts";
+import { fixedCostPlans, householdMembers, incomes, invites, transactions, users } from "../../db/schema.ts";
 import { ApiError } from "../../lib/errors.ts";
 import { nowMs } from "../../lib/clock.ts";
 import { toIso } from "../../lib/http.ts";
-import { isUniqueViolation } from "../auth/users.service.ts";
-import type { DbLike } from "../support.ts";
+import { createPlaceholderUser, isPlaceholderUser, isUniqueViolation } from "../auth/users.service.ts";
+import { type DbLike, withTransaction } from "../support.ts";
 
 /** Slots currently occupied in a household — at most `{1, 2}`. */
-async function occupiedSlots(db: Database, householdId: string): Promise<Set<1 | 2>> {
+async function occupiedSlots(db: DbLike, householdId: string): Promise<Set<1 | 2>> {
   const rows = await db
     .select({ memberSlot: householdMembers.memberSlot })
     .from(householdMembers)
@@ -33,7 +33,7 @@ async function occupiedSlots(db: Database, householdId: string): Promise<Set<1 |
  * had seen the seat taken, never a raw SQLite error escaping as a 500.
  */
 export async function assignSlot(
-  db: Database,
+  db: DbLike,
   householdId: string,
   userId: string,
   displayName: string,
@@ -60,7 +60,7 @@ export async function assignSlot(
 
 function toMemberResponse(
   member: { memberSlot: number; displayName: string; joinedAt: number },
-  user: { id: string; name: string; email: string },
+  user: { id: string; name: string; email: string | null; passwordHash: string | null },
 ): MemberResponse {
   return {
     userId: user.id,
@@ -68,8 +68,42 @@ function toMemberResponse(
     memberSlot: member.memberSlot === 2 ? 2 : 1,
     name: user.name,
     email: user.email,
+    hasAccount: !isPlaceholderUser(user),
     joinedAt: toIso(member.joinedAt),
   };
+}
+
+/**
+ * Seats a PLACEHOLDER — a person without an account — in the free slot
+ * (docs/spec.md §3.5). The user row and the membership are written in one
+ * transaction: a placeholder that exists but sits in no household is an
+ * orphan nobody can ever see or claim. 409 `household_full` as for any seat.
+ */
+export async function addPlaceholderMember(db: Database, householdId: string, displayName: string): Promise<MemberResponse> {
+  const userId = await withTransaction(db, async (tx) => {
+    const user = await createPlaceholderUser(tx, displayName);
+    await assignSlot(tx, householdId, user.id, displayName);
+    return user.id;
+  });
+  return getMember(db, householdId, userId);
+}
+
+/**
+ * True when `userId` is seated in `householdId` AND has no account. The
+ * routes use it to widen "only yourself" to "yourself or the placeholder":
+ * someone without a login cannot rename or remove themselves, so the other
+ * member does it for them — and ONLY for them (a real second person is still
+ * never edited by anyone else, docs/spec.md §3.5).
+ */
+export async function isPlaceholderMember(db: Database, householdId: string, userId: string): Promise<boolean> {
+  const rows = await db
+    .select({ passwordHash: users.passwordHash })
+    .from(householdMembers)
+    .innerJoin(users, eq(users.id, householdMembers.userId))
+    .where(and(eq(householdMembers.householdId, householdId), eq(householdMembers.userId, userId)))
+    .limit(1);
+  const row = rows[0];
+  return row !== undefined && isPlaceholderUser(row);
 }
 
 /** Members of a household incl. their public user record — ONE joined query. */
@@ -180,4 +214,40 @@ export async function removeMember(db: Database, householdId: string, userId: st
   await db
     .delete(householdMembers)
     .where(and(eq(householdMembers.householdId, householdId), eq(householdMembers.userId, userId)));
+}
+
+/**
+ * Removes a PLACEHOLDER from the household and deletes the user row behind
+ * it — unlike {@link removeMember}, nothing survives: there is no account
+ * that could join another household later. Same `member_has_ledger` rule
+ * (any transaction naming them as payer, or the fixed-cost plan naming them
+ * as ITS payer — both `RESTRICT` FKs, and both mean the ledger still needs
+ * this person). Their income rows go with them: incomes are plan input for a
+ * person, and a person who leaves without a single booking leaves no history
+ * anyone could reconstruct from them. Open claim invites cascade away with
+ * the row (`invites.claims_user_id`).
+ */
+export async function removePlaceholderMember(db: Database, householdId: string, userId: string): Promise<void> {
+  if (!(await isPlaceholderMember(db, householdId, userId))) throw ApiError.notFound();
+
+  const ledgerRows = await db
+    .select({ id: transactions.id })
+    .from(transactions)
+    .where(and(eq(transactions.householdId, householdId), eq(transactions.payerId, userId)))
+    .limit(1);
+  const planRows = await db
+    .select({ householdId: fixedCostPlans.householdId })
+    .from(fixedCostPlans)
+    .where(and(eq(fixedCostPlans.householdId, householdId), eq(fixedCostPlans.payerId, userId)))
+    .limit(1);
+  if (ledgerRows.length > 0 || planRows.length > 0) {
+    throw ApiError.conflict("member_has_ledger", "server.household.memberHasLedger");
+  }
+
+  await withTransaction(db, async (tx) => {
+    await tx.delete(incomes).where(and(eq(incomes.householdId, householdId), eq(incomes.personId, userId)));
+    await tx.delete(invites).where(eq(invites.claimsUserId, userId));
+    await tx.delete(householdMembers).where(and(eq(householdMembers.householdId, householdId), eq(householdMembers.userId, userId)));
+    await tx.delete(users).where(eq(users.id, userId));
+  });
 }

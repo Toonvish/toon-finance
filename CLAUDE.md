@@ -24,6 +24,10 @@ Cent nicht stimmt und den niemand mehr rekonstruieren kann.
    sind eine **Projektion auf den Betrachter**, berechnet beim Rendern, **nie gespeichert**. Es gibt
    keine `beneficiary_id`, keine Prozentregel, keine `shares`-Tabelle, keinen N-Personen-Algorithmus.
    Slot 1 ist der Anker der Saldo-Konvention: `balanceCents > 0` heißt „Slot 2 schuldet Slot 1".
+   **Platzhalter** sind die eine Erweiterung: Slot 2 darf eine `users`-Zeile OHNE E-Mail und Passwort
+   sein (`isPlaceholderUser`), damit man sofort für die zweite Person buchen kann. Sie wird über eine
+   **Claim-Einladung** (`invites.claims_user_id`, eingelöst nur per `register`) **in place** zum Konto —
+   gleiche `id`, kein Merge, keine `payer_id` wird je umgehängt. Spec §2.1, §2.5, §3.5.
 2. **Kategorien + freie Tags.** 21 Default-Kategorien pro Haushalt, stabile `slug`s im Code, Label aus
    dem i18n-Katalog, solange `custom_label` null ist. `fixkosten` ist systemeigen (nicht löschbar, nicht
    umbenennbar) — der Plan schreibt hinein. Tags sind normalisierte Zeilen (`tags` +

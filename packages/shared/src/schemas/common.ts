@@ -61,6 +61,8 @@ export const ERROR_CODES = [
   "household_full",
   "household_required",
   "member_has_ledger",
+  "member_has_account",
+  "invite_claim_requires_register",
   // ledger
   "transaction_amount_zero",
   "transaction_generated",

@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { Users, Wallet } from "lucide-react";
 import { useT } from "@/lib/i18n/I18nProvider.tsx";
 import { isApiError } from "@/lib/api";
-import { useSession } from "@/lib/session";
+import { useLogout, useSession } from "@/lib/session";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -40,6 +40,7 @@ export function InvitePage() {
   const { isAuthenticated, isLoading } = useSession();
   const preview = useInvitePreview(token ?? "");
   const accept = useAcceptInvite();
+  const logout = useLogout();
   const navigate = useNavigate();
   const toast = useToast();
 
@@ -69,6 +70,38 @@ export function InvitePage() {
   }
 
   const invite = preview.data;
+
+  // A CLAIM invite hands over a seat that already exists (a placeholder
+  // without an account). It is redeemed by REGISTERING — a signed-in account
+  // cannot take it (the server answers `invite_claim_requires_register`), so
+  // the only offer here is "sign out, then create the account".
+  if (invite.claimsDisplayName !== null) {
+    return (
+      <AuthCard
+        title={t("auth.invite.title")}
+        subtitle={t("auth.invite.claimSubtitle", {
+          name: invite.invitedByName,
+          household: invite.householdName,
+          display: invite.claimsDisplayName,
+        })}
+      >
+        {isAuthenticated ? (
+          <div className="flex flex-col gap-3">
+            <p className="text-center text-sm text-fg-muted">{t("auth.invite.claimLoggedIn")}</p>
+            <Button fullWidth variant="secondary" loading={logout.isPending} onClick={() => logout.mutate()}>
+              {t("auth.invite.claimLogout")}
+            </Button>
+          </div>
+        ) : (
+          <Link to="/register" search={{ invite: token }} className="block">
+            <Button fullWidth size="lg">
+              {t("auth.invite.claimCreateAccount")}
+            </Button>
+          </Link>
+        )}
+      </AuthCard>
+    );
+  }
 
   return (
     <AuthCard

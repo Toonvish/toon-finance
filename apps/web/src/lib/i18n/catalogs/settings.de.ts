@@ -27,7 +27,7 @@ export const settingsDe = {
   "settings.household.displayName": "Anzeigename",
   "settings.household.invite": "Zweite Person einladen",
   "settings.household.inviteCreate": "Einladung erstellen",
-  "settings.household.inviteEmail": "E-Mail-Adresse (optional)",
+  "settings.household.inviteEmail": "E-Mail-Adresse",
   "settings.household.inviteLink": "Einladungslink",
   "settings.household.inviteLinkHint": "Der Link gilt 14 Tage. Wer ihn hat, kann beitreten.",
   "settings.household.inviteRevoke": "Einladung zurückziehen",
@@ -37,6 +37,22 @@ export const settingsDe = {
   "settings.household.mailFailed":
     "Der Versand ist fehlgeschlagen. Der Link gilt trotzdem — gib ihn von Hand weiter.",
   "settings.household.full": "Dieser Haushalt ist vollständig. Mehr als zwei Personen sind nicht vorgesehen.",
+  "settings.household.placeholderTitle": "Ohne Konto hinzufügen",
+  "settings.household.placeholderDescription":
+    "Trag die zweite Person nur mit Namen ein. Du kannst sofort für sie buchen; ein Konto verknüpfst du später.",
+  "settings.household.placeholderCreate": "Person eintragen",
+  "settings.household.placeholderBadge": "ohne Konto",
+  "settings.household.placeholderHint": "Kann sich noch nicht anmelden.",
+  "settings.household.placeholderRename": "Umbenennen",
+  "settings.household.placeholderRemove": "Person entfernen",
+  "settings.household.placeholderRemoveConfirm":
+    '„{name}" wirklich entfernen? Das geht nur, solange es keine Buchungen für diese Person gibt.',
+  "settings.household.linkAccount": "Konto für {name} verknüpfen",
+  "settings.household.linkAccountHint":
+    "Der Link legt das Konto für diesen Platz an. Alle bisherigen Buchungen bleiben dieser Person zugeordnet.",
+  "settings.household.linkAccountCreate": "Link zum Verknüpfen erstellen",
+  "settings.household.linkAccountLinkHint":
+    "Der Link gilt 14 Tage. Wer ihn öffnet, erstellt damit das Konto für diesen Platz.",
   "settings.household.leave": "Haushalt verlassen",
   "settings.household.leaveConfirm": "Wirklich verlassen? Du siehst danach keine Buchungen mehr.",
   "settings.language.title": "Sprache",

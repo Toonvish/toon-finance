@@ -30,7 +30,7 @@ import { created, json, noContent } from "../lib/http.ts";
 import type { AppContext, AppEnv } from "../lib/types.ts";
 import { requireUser } from "../lib/types.ts";
 import { requireSession } from "../middleware/session.ts";
-import { acceptInvite, loadRedeemableInvite } from "../services/auth/invites.ts";
+import { acceptInvite, claimInvite, loadRedeemableInvite } from "../services/auth/invites.ts";
 import { consumePasswordReset, createPasswordResetToken } from "../services/auth/passwordReset.ts";
 import { hashPassword, verifyPassword } from "../services/auth/passwords.ts";
 import {
@@ -96,13 +96,22 @@ authRoutes.post("/register", async (c) => {
 
   // Validate the invite BEFORE creating anything, so a bad token cannot leave
   // a user without a household behind.
-  if (body.inviteToken) await loadRedeemableInvite(db, body.inviteToken);
+  const invite = body.inviteToken ? await loadRedeemableInvite(db, body.inviteToken) : undefined;
 
   if (await findUserByEmail(db, body.email)) {
     throw ApiError.conflict("email_taken", "server.auth.emailTaken");
   }
 
   const passwordHash = await hashPassword(body.password);
+
+  // A CLAIM invite creates no user: it turns the placeholder it names into
+  // this account, in place, so the ledger keeps pointing at the same person.
+  if (invite?.claimsUserId) {
+    const userId = await claimInvite(db, invite.token, { email: body.email, name: body.name, passwordHash });
+    await startSession(c, userId);
+    return created(c, await authPayload(userId));
+  }
+
   const user = await createUser(db, { email: body.email, name: body.name, passwordHash });
 
   if (body.inviteToken) {
@@ -213,8 +222,10 @@ authRoutes.post("/password/forgot", async (c) => {
   enforceRateLimit(c, "password-forgot", clientIp(c), FORGOT_PASSWORD_RULE);
   enforceRateLimit(c, "password-forgot-email", body.email, FORGOT_PASSWORD_EMAIL_RULE);
 
+  // `findUserByEmail` matches on `email_normalized`, which a placeholder does
+  // not have — so `user.email` is non-null here; the guard is for the type.
   const user = await findUserByEmail(db, body.email);
-  if (user) {
+  if (user && user.email !== null) {
     const { token } = await createPasswordResetToken(db, user.id);
     const origin = env.webOrigins[0] ?? "";
     await trySendMail(

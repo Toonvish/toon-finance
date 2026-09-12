@@ -11,12 +11,33 @@ import { type UserRow, users } from "../../db/schema.ts";
 import { env } from "../../env.ts";
 import { ApiError } from "../../lib/errors.ts";
 import { toIso } from "../../lib/http.ts";
+import type { DbLike } from "../support.ts";
+
+/**
+ * A PLACEHOLDER is a person seated in a household without an account behind
+ * them (docs/spec.md §2.1): `email`, `email_normalized` and `password_hash`
+ * are all null. The hash is the predicate — an account can never lose its
+ * hash, and a placeholder never gains one without the other two.
+ */
+export function isPlaceholderUser(row: Pick<UserRow, "passwordHash">): boolean {
+  return row.passwordHash === null;
+}
+
+/**
+ * A placeholder has no login path (nothing to look up by, nothing to verify),
+ * so a session naming one is a programming error, not a user-facing state.
+ * Both mappers refuse it as 401 rather than inventing an empty address.
+ */
+function requireAccountEmail(row: UserRow): string {
+  if (row.email === null) throw ApiError.unauthorized();
+  return row.email;
+}
 
 /** Row -> the minimal shape every request handler needs (never the hash). */
 export function toSessionUser(row: UserRow): SessionUser {
   return {
     id: row.id,
-    email: row.email,
+    email: requireAccountEmail(row),
     name: row.name,
     locale: isLocale(row.locale) ? row.locale : env.defaultLocale,
   };
@@ -26,7 +47,7 @@ export function toSessionUser(row: UserRow): SessionUser {
 export function toUserResponse(row: UserRow): UserResponse {
   return {
     id: row.id,
-    email: row.email,
+    email: requireAccountEmail(row),
     name: row.name,
     locale: isLocale(row.locale) ? row.locale : env.defaultLocale,
     createdAt: toIso(row.createdAt),
@@ -71,6 +92,65 @@ export async function createUser(database: Database, input: CreateUserInput): Pr
     throw error;
   }
   return row;
+}
+
+/**
+ * Inserts a placeholder user — a name and nothing else. Only ever called by
+ * `addPlaceholderMember` (members.service.ts), which seats the row in the
+ * same breath; a placeholder outside a household is an orphan nobody can see.
+ */
+export async function createPlaceholderUser(database: DbLike, name: string): Promise<UserRow> {
+  const now = Date.now();
+  const row: UserRow = {
+    id: crypto.randomUUID(),
+    email: null,
+    emailNormalized: null,
+    name: name.trim(),
+    passwordHash: null,
+    locale: env.defaultLocale,
+    createdAt: now,
+    updatedAt: now,
+  };
+  await database.insert(users).values(row);
+  return row;
+}
+
+export interface ClaimUserInput {
+  email: string;
+  name: string;
+  passwordHash: string;
+}
+
+/**
+ * Turns a placeholder into an account IN PLACE — same id, so every
+ * `payer_id`, `person_id` and membership row keeps naming the same person.
+ * 409 `email_taken` when the address already belongs to another account;
+ * 409 `member_has_account` if the row was claimed meanwhile (a second claim
+ * would otherwise overwrite someone's password).
+ */
+export async function claimPlaceholderUser(database: DbLike, userId: string, input: ClaimUserInput): Promise<UserRow> {
+  const rows = await database.select().from(users).where(eq(users.id, userId)).limit(1);
+  const row = rows[0];
+  if (!row) throw ApiError.notFound();
+  if (!isPlaceholderUser(row)) throw ApiError.conflict("member_has_account", "server.household.memberHasAccount");
+  try {
+    await database
+      .update(users)
+      .set({
+        email: input.email.trim(),
+        emailNormalized: input.email.trim().toLowerCase(),
+        name: input.name.trim(),
+        passwordHash: input.passwordHash,
+        updatedAt: Date.now(),
+      })
+      .where(eq(users.id, userId));
+  } catch (error) {
+    if (isUniqueViolation(error)) throw ApiError.conflict("email_taken", "server.auth.emailTaken");
+    throw error;
+  }
+  const updated = await database.select().from(users).where(eq(users.id, userId)).limit(1);
+  if (!updated[0]) throw ApiError.internal();
+  return updated[0];
 }
 
 export interface UpdateProfileInput {

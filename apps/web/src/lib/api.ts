@@ -28,6 +28,7 @@ import type {
   CreateHouseholdRequest,
   CreateIncomeRequest,
   CreateInviteRequest,
+  CreatePlaceholderMemberRequest,
   CreateSettlementRequest,
   CreateTransactionRequest,
   FixedCostItemResponse,
@@ -477,7 +478,20 @@ export function fetchHouseholdMembers(
   return request<MemberListResponse>(`/api/households/${householdId}/members`, options);
 }
 
-/** Renames the CALLER's own display name — the API 403s on any other userId. */
+/**
+ * Seats a PLACEHOLDER — a person without an account — in the free slot.
+ * 409 `household_full`. The login comes later via a claim invite
+ * (`createHouseholdInvite` with `claimsUserId`).
+ */
+export function createPlaceholderMember(
+  householdId: string,
+  body: CreatePlaceholderMemberRequest,
+  options?: RequestOptions,
+): Promise<MemberListResponse["items"][number]> {
+  return request(`/api/households/${householdId}/members`, { ...options, method: "POST", body });
+}
+
+/** Renames the CALLER's own display name or the placeholder's — the API 403s on any other userId. */
 export function updateMemberDisplayName(
   householdId: string,
   userId: string,
@@ -491,7 +505,10 @@ export function updateMemberDisplayName(
   });
 }
 
-/** Leaves the household — only ever the caller's own membership. 409 `member_has_ledger`. */
+/**
+ * Leaves the household (the caller's own membership) or removes the
+ * placeholder (any other userId is 403). 409 `member_has_ledger`.
+ */
 export function leaveHousehold(householdId: string, userId: string, options?: RequestOptions): Promise<void> {
   return request<void>(`/api/households/${householdId}/members/${userId}`, {
     ...options,

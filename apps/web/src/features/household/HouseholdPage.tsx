@@ -103,9 +103,9 @@ function HouseholdDetail({ householdId }: { householdId: string }) {
         </Card>
       ) : null}
 
-      <MemberList members={members} />
+      <MemberList householdId={householdId} members={members} />
 
-      <InviteCard householdId={householdId} memberCount={household.memberCount} invites={invites.data?.items ?? []} />
+      <InviteCard householdId={householdId} members={members} invites={invites.data?.items ?? []} />
 
       <Card>
         <CardHeader title={t("settings.household.leave")} />

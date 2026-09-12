@@ -22,7 +22,7 @@ test("ERROR_CODES is the exact, stable wire contract from docs/spec.md §3.2", (
   expect(ERROR_CODES).toContain("transaction_amount_zero");
   expect(ERROR_CODES).toContain("plan_period_out_of_range");
   expect(new Set(ERROR_CODES).size).toBe(ERROR_CODES.length); // no duplicates
-  expect(ERROR_CODES.length).toBe(30);
+  expect(ERROR_CODES.length).toBe(32);
 });
 
 describe("PeriodSchema", () => {

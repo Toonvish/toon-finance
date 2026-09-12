@@ -20,6 +20,7 @@ export const authEn: LocaleCatalog<AuthCatalog> = {
   "auth.register.submit": "Create account",
   "auth.register.toLogin": "Already have an account? Sign in",
   "auth.register.inviteHint": 'You are joining the household "{household}".',
+  "auth.register.claimHint": 'You are creating the account for "{display}" in the household "{household}".',
   "auth.forgot.title": "Reset password",
   "auth.forgot.subtitle": "We'll send you a link to your email address.",
   "auth.forgot.submit": "Request link",
@@ -37,6 +38,10 @@ export const authEn: LocaleCatalog<AuthCatalog> = {
   "auth.invite.expired": "This invitation has expired. Please ask for a new one.",
   "auth.invite.full": "This household already has two members.",
   "auth.invite.alreadyMember": "You are already a member of this household.",
+  "auth.invite.claimSubtitle": '{name} added you as "{display}" to the household "{household}". Create your account to sign in.',
+  "auth.invite.claimCreateAccount": "Create account",
+  "auth.invite.claimLoggedIn": "This link creates the account for a person who is already listed. Sign out to use it.",
+  "auth.invite.claimLogout": "Sign out",
   "auth.logout": "Sign out",
   "auth.displayName": "Display name in the household",
 };

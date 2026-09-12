@@ -15,6 +15,7 @@ import {
   type AcceptInviteResponse,
   CreateHouseholdRequestSchema,
   CreateInviteRequestSchema,
+  CreatePlaceholderMemberRequestSchema,
   type HouseholdDetailResponse,
   type HouseholdListResponse,
   UpdateHouseholdRequestSchema,
@@ -37,7 +38,14 @@ import {
   listHouseholdsForUser,
   updateHousehold,
 } from "../services/households/households.service.ts";
-import { listMembers, removeMember, updateMemberDisplayName } from "../services/households/members.service.ts";
+import {
+  addPlaceholderMember,
+  isPlaceholderMember,
+  listMembers,
+  removeMember,
+  removePlaceholderMember,
+  updateMemberDisplayName,
+} from "../services/households/members.service.ts";
 
 export const householdsRoutes = new Hono<AppEnv>();
 
@@ -135,9 +143,38 @@ householdsRoutes.get("/:householdId/members", requireSession(), requireHousehold
 });
 
 /**
+ * POST /api/households/:householdId/members — seat a PLACEHOLDER: a person
+ * without an account, named by the member who is already here. The seat is
+ * real (slot 2, a payer the ledger can name); the login comes later through
+ * a claim invite (`POST …/invites { claimsUserId }`). 409 `household_full`.
+ */
+householdsRoutes.post(
+  "/:householdId/members",
+  requireSession(),
+  requireHousehold(),
+  zValidator("json", CreatePlaceholderMemberRequestSchema, onValidationError),
+  async (c) => {
+    const household = requireHouseholdContext(c);
+    const member = await addPlaceholderMember(db, household.householdId, c.req.valid("json").displayName);
+    return created(c, member, `/api/households/${household.householdId}/members/${member.userId}`);
+  },
+);
+
+/**
+ * Yourself, or the household's placeholder. At two real members, changing
+ * the OTHER person's seat is not a feature (docs/spec.md §3.5) — but a
+ * placeholder has no login, so the only hands that can rename or remove it
+ * are the other member's. Anything else is 403.
+ */
+async function assertMayEditMember(householdId: string, callerId: string, targetUserId: string): Promise<boolean> {
+  if (targetUserId === callerId) return false;
+  if (await isPlaceholderMember(db, householdId, targetUserId)) return true;
+  throw ApiError.forbidden();
+}
+
+/**
  * PATCH /api/households/:householdId/members/:userId — rename the caller's
- * OWN display name. At two members, changing someone else's is not a feature
- * (docs/spec.md §3.5), so anything other than the caller's own id is 403.
+ * OWN display name, or the placeholder's.
  */
 householdsRoutes.patch(
   "/:householdId/members/:userId",
@@ -147,22 +184,24 @@ householdsRoutes.patch(
   async (c) => {
     const household = requireHouseholdContext(c);
     const targetUserId = c.req.param("userId");
-    if (targetUserId !== household.userId) throw ApiError.forbidden();
+    await assertMayEditMember(household.householdId, household.userId, targetUserId);
     const member = await updateMemberDisplayName(db, household.householdId, targetUserId, c.req.valid("json").displayName);
     return json(c, member);
   },
 );
 
 /**
- * DELETE /api/households/:householdId/members/:userId — leave the household.
- * Only ever the caller's own membership; 409 `member_has_ledger` while any
- * transaction still names this person as payer.
+ * DELETE /api/households/:householdId/members/:userId — leave the household
+ * (your own membership), or remove the placeholder (their whole user row goes
+ * with them). 409 `member_has_ledger` while any transaction still names this
+ * person as payer.
  */
 householdsRoutes.delete("/:householdId/members/:userId", requireSession(), requireHousehold(), async (c) => {
   const household = requireHouseholdContext(c);
   const targetUserId = c.req.param("userId");
-  if (targetUserId !== household.userId) throw ApiError.forbidden();
-  await removeMember(db, household.householdId, targetUserId);
+  const isPlaceholder = await assertMayEditMember(household.householdId, household.userId, targetUserId);
+  if (isPlaceholder) await removePlaceholderMember(db, household.householdId, targetUserId);
+  else await removeMember(db, household.householdId, targetUserId);
   return noContent(c);
 });
 
@@ -185,7 +224,8 @@ householdsRoutes.post(
   async (c) => {
     const household = requireHouseholdContext(c);
     const user = requireUser(c);
-    const result = await createInvite(db, household.householdId, user.id, c.req.valid("json").email);
+    const body = c.req.valid("json");
+    const result = await createInvite(db, household.householdId, user.id, { email: body.email, claimsUserId: body.claimsUserId });
     return created(c, result);
   },
 );
