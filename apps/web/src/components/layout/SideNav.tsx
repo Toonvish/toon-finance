@@ -1,12 +1,12 @@
 import { Link } from "@tanstack/react-router";
-import { LogOut, Plus, Wallet } from "lucide-react";
-import { cn } from "@/lib/cn";
+import { LogOut, Plus } from "lucide-react";
 import { initials } from "@/lib/format";
 import { useT } from "@/lib/i18n/I18nProvider.tsx";
 import { useQuickAdd } from "@/lib/quick-add";
 import { useHousehold, useLogout, useSession } from "@/lib/session";
 import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
+import { Logo } from "./Logo";
 import { NAV_ITEMS, SECONDARY_NAV_ITEMS } from "./nav-items";
 
 /**
@@ -15,6 +15,12 @@ import { NAV_ITEMS, SECONDARY_NAV_ITEMS } from "./nav-items";
  * desktop counterpart of the phone's floating "+", opening the same
  * `QuickAddDialog`. It sits ABOVE the nav list, because it is an action, not
  * a destination; the `N` hint is the shortcut `lib/quick-add.tsx` binds.
+ *
+ * Chrome follows toon-recipe's sidebar: `w-sidebar` (236px, paired with
+ * `lg:pl-sidebar` on AppShell), `bg-bg-sunken` — one step BELOW `--bg`, not
+ * `bg-bg-elevated`, which in dark mode is lighter than the page and would invert
+ * the intended depth — and `border-surface-2` for every internal divider. The
+ * secondary destinations sit under an `.eyebrow` section label.
  */
 export function SideNav() {
   const { user } = useSession();
@@ -24,13 +30,11 @@ export function SideNav() {
   const t = useT();
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col gap-4 border-r border-line bg-bg-elevated p-4 lg:flex">
-      <Link to="/" className="flex items-center gap-2 rounded-xl px-1 py-1.5">
-        <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand-soft-fg">
-          <Wallet className="size-5" />
-        </span>
-        <span className="min-w-0 truncate text-lg font-semibold tracking-tight text-fg">
-          {household?.name ?? "toon-finance"}
+    <aside className="fixed inset-y-0 left-0 z-30 hidden w-sidebar flex-col gap-[22px] border-r border-surface-2 bg-bg-sunken px-3.5 py-5 lg:flex">
+      <Link to="/" className="flex items-center gap-2.5 px-1.5">
+        <Logo className="size-8" />
+        <span className="min-w-0 truncate font-display text-display-md font-medium text-fg">
+          {household?.name ?? t("common.appName")}
         </span>
       </Link>
 
@@ -51,14 +55,14 @@ export function SideNav() {
         </Button>
       ) : null}
 
-      <nav aria-label={t("nav.overview")} className="flex-1">
-        <ul className="flex flex-col gap-1">
-          {[...NAV_ITEMS, ...SECONDARY_NAV_ITEMS].map((item) => (
+      <nav aria-label={t("nav.overview")}>
+        <ul className="flex flex-col gap-0.5">
+          {NAV_ITEMS.map((item) => (
             <li key={item.to}>
               <Link
                 to={item.to}
                 activeOptions={{ exact: item.exact }}
-                className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium text-fg-muted transition-colors duration-150 hover:bg-surface-2 hover:text-fg"
+                className="flex items-center gap-3 rounded-control px-3 py-2.5 text-sm font-medium text-fg-muted transition-colors duration-150 hover:bg-surface-2 hover:text-fg"
                 activeProps={{
                   className: "bg-brand-soft text-brand-soft-fg hover:bg-brand-soft",
                   "aria-current": "page",
@@ -66,7 +70,7 @@ export function SideNav() {
               >
                 {({ isActive }) => (
                   <>
-                    <item.icon className={cn("size-5 shrink-0")} strokeWidth={isActive ? 2.3 : 1.9} aria-hidden="true" />
+                    <item.icon className="size-[18px] shrink-0" strokeWidth={isActive ? 2.3 : 2} aria-hidden="true" />
                     {t(item.labelKey)}
                   </>
                 )}
@@ -76,17 +80,45 @@ export function SideNav() {
         </ul>
       </nav>
 
-      <div className="flex items-center gap-2 border-t border-line pt-3">
-        <Link to="/settings" className="flex min-w-0 flex-1 items-center gap-2 rounded-xl p-1.5 hover:bg-surface-2">
+      <div className="flex flex-col gap-0.5 border-t border-surface-2 pt-3.5">
+        <span className="eyebrow px-3 pb-1.5 text-fg-faint">{t("nav.manage")}</span>
+        <nav aria-label={t("nav.manage")}>
+          <ul className="flex flex-col gap-0.5">
+            {SECONDARY_NAV_ITEMS.map((item) => (
+              <li key={item.to}>
+                <Link
+                  to={item.to}
+                  activeOptions={{ exact: item.exact }}
+                  className="flex items-center gap-3 rounded-control px-3 py-2 text-control font-medium text-fg-muted transition-colors duration-150 hover:bg-surface-2 hover:text-fg"
+                  activeProps={{
+                    className: "bg-brand-soft text-brand-soft-fg hover:bg-brand-soft",
+                    "aria-current": "page",
+                  }}
+                >
+                  {({ isActive }) => (
+                    <>
+                      <item.icon className="size-4 shrink-0" strokeWidth={isActive ? 2.3 : 2} aria-hidden="true" />
+                      {t(item.labelKey)}
+                    </>
+                  )}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      </div>
+
+      <div className="mt-auto flex items-center gap-2.5 border-t border-surface-2 px-2 py-2.5">
+        <Link to="/settings" className="flex min-w-0 flex-1 items-center gap-2.5 rounded-control">
           <span
             aria-hidden="true"
-            className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-semibold text-brand-soft-fg"
+            className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold text-brand-fg"
           >
             {initials(user?.name)}
           </span>
           <span className="min-w-0">
-            <span className="block truncate text-sm font-medium text-fg">{user?.name ?? t("nav.profile")}</span>
-            <span className="block truncate text-xs text-fg-muted">{user?.email}</span>
+            <span className="block truncate text-[0.81rem] font-semibold text-fg">{user?.name ?? t("nav.profile")}</span>
+            <span className="block truncate text-[0.72rem] text-fg-subtle">{user?.email}</span>
           </span>
         </Link>
         <IconButton

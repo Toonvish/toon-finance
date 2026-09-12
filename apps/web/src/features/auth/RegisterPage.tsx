@@ -1,34 +1,16 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "@tanstack/react-router";
-import { Mail, User, Wallet } from "lucide-react";
+import { Mail, User } from "lucide-react";
 import { RegisterRequestSchema } from "@toon/shared";
 import { useT } from "@/lib/i18n/I18nProvider.tsx";
 import { safeNextPath, useGoTo, useSearchParams } from "@/lib/navigation";
 import { useRegister, useSession } from "@/lib/session";
 import { apiFieldErrors, clearField, validate, type FieldErrors } from "@/lib/validation";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Input, PasswordInput } from "@/components/ui/Input";
+import { AuthLayout } from "./AuthLayout";
 import { useInvitePreview } from "./lib/queries";
-
-function AuthCard({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) {
-  return (
-    <div className="flex min-h-dvh items-center justify-center bg-bg px-gutter py-8">
-      <Card padding="lg" className="w-full max-w-sm">
-        <span
-          aria-hidden="true"
-          className="mx-auto flex size-12 items-center justify-center rounded-full bg-brand-soft text-brand-soft-fg"
-        >
-          <Wallet className="size-6" />
-        </span>
-        <h1 className="mt-4 text-center text-xl font-semibold text-fg">{title}</h1>
-        <p className="mt-1 text-center text-sm text-fg-muted">{subtitle}</p>
-        <div className="mt-6">{children}</div>
-      </Card>
-    </div>
-  );
-}
 
 /**
  * `/register?invite=<token>` — plain e-mail/password sign-up. Without an
@@ -81,7 +63,7 @@ export function RegisterPage() {
   }
 
   return (
-    <AuthCard title={t("auth.register.title")} subtitle={t("auth.register.subtitle")}>
+    <AuthLayout title={t("auth.register.title")} description={t("auth.register.subtitle")}>
       {inviteToken && invitePreview.data ? (
         <p className="mb-4 rounded-card border border-brand/30 bg-brand-soft p-3 text-sm text-brand-soft-fg">
           {invitePreview.data.claimsDisplayName !== null
@@ -157,7 +139,7 @@ export function RegisterPage() {
           {t("auth.register.toLogin")}
         </Link>
       </p>
-    </AuthCard>
+    </AuthLayout>
   );
 }
 

@@ -67,7 +67,7 @@ export function KindPicker({ value, onChange, amountCents, otherName }: KindPick
               tabIndex={active ? 0 : -1}
               onClick={() => onChange(kind)}
               className={cn(
-                "relative flex min-h-[5.25rem] flex-col items-start gap-1 rounded-xl border p-2.5 text-left transition-colors duration-150",
+                "relative flex min-h-[5.25rem] flex-col items-start gap-1 rounded-control border p-2.5 text-left transition-colors duration-150",
                 "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
                 active
                   ? "border-[1.5px] border-brand bg-brand-soft text-brand-soft-fg"
@@ -78,8 +78,8 @@ export function KindPicker({ value, onChange, amountCents, otherName }: KindPick
                 <Icon aria-hidden="true" className={cn("size-5", active ? "text-brand" : "text-fg-muted")} />
                 {active ? <Check aria-hidden="true" className="size-4 text-brand" /> : null}
               </span>
-              <span className="text-[0.84rem] leading-tight font-semibold">{label}</span>
-              <span className="text-[0.72rem] leading-snug text-fg-muted">{hint}</span>
+              <span className="text-control font-semibold">{label}</span>
+              <span className="text-xs leading-snug text-fg-muted">{hint}</span>
             </button>
           );
         })}

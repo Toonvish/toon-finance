@@ -30,13 +30,13 @@ export function Chip({ selected = false, variant = "solid", className, children,
       type="button"
       aria-pressed={variant === "solid" ? selected : undefined}
       className={cn(
-        "inline-flex min-h-9 shrink-0 items-center rounded-full px-3.5 text-sm transition-colors duration-150",
+        "inline-flex min-h-9 shrink-0 items-center rounded-full px-3.5 text-control transition-colors duration-150",
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
         variant === "dashed"
           ? "border border-dashed border-line-strong font-semibold text-brand hover:border-brand"
           : selected
-            ? "border-[1.5px] border-brand bg-brand-soft font-semibold text-brand-soft-fg"
-            : "border border-line bg-surface font-medium text-fg-muted hover:border-line-strong hover:text-fg",
+            ? "border border-brand bg-brand-soft font-medium text-brand-soft-fg"
+            : "border border-line bg-surface font-medium text-fg-body hover:border-brand hover:text-brand-soft-fg",
         className,
       )}
       {...rest}

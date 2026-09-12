@@ -2,7 +2,7 @@ import type { LocaleCatalog } from "@toon/shared";
 import type { CommonCatalog } from "./common.de.ts";
 
 export const commonEn: LocaleCatalog<CommonCatalog> = {
-  "common.appName": "toon-finance",
+  "common.appName": "Finanzen",
   "common.save": "Save",
   "common.cancel": "Cancel",
   "common.delete": "Delete",

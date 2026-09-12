@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <!-- viewport-fit=cover so the safe-area insets work under the notch / home indicator -->
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>toon-finance</title>
+    <title>Finanzen</title>
     <meta
       name="description"
       content="Haushaltskasse für zwei: Ausgaben erfassen, aufteilen und ausgleichen."
@@ -14,10 +14,10 @@
     <meta name="theme-color" content="#f5f3ef" />
 
     <!-- installable PWA — <link rel="manifest"> is injected by vite-plugin-pwa -->
-    <meta name="application-name" content="toon-finance" />
+    <meta name="application-name" content="Finanzen" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-title" content="toon-finance" />
+    <meta name="apple-mobile-web-app-title" content="Finanzen" />
     <!--
       NO `apple-mobile-web-app-status-bar-style: black-translucent` here, and do
       not put it back — see CLAUDE.md gotcha 30. `viewport-fit=cover` above plus
@@ -29,6 +29,17 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="/icons/icon-192.png" sizes="192x192" type="image/png" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" sizes="180x180" />
+    <link rel="mask-icon" href="/favicon.svg" color="#0f6e70" />
+
+    <!--
+      Preload only the two LATIN files. `crossorigin` is required even for a same-origin
+      font or the preload is fetched twice (once anonymously for the preload, once with
+      the CORS mode the CSS font fetch uses). latin-ext is deliberately NOT preloaded: it
+      only matters once a non-Latin-1 character appears, and preloading it would spend
+      ~11 KB of the critical path on most sessions for nothing.
+    -->
+    <link rel="preload" href="/fonts/figtree-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/newsreader-500-latin.woff2" as="font" type="font/woff2" crossorigin />
 
     <script>
       // Apply the saved colour scheme before the first paint (no flash of light UI).

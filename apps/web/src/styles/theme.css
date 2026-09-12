@@ -21,6 +21,18 @@
  * border-line, …). Dark mode swaps the variables, so no component needs a
  * `dark:` class — except `@custom-variant dark` itself (styles/index.css),
  * which exists for the rare case a component truly needs one.
+ *
+ * FOUR BLOCKS, ONE LIST. The palette is declared four times — :root (light), the
+ * prefers-color-scheme:dark media query, :root[data-theme="light"] and
+ * :root[data-theme="dark"] — and the two attribute blocks only override what they
+ * NAME. A token added to some of them is a silent bug: the media query's value
+ * stands for anything [data-theme] omits, so "light theme on a dark phone" renders
+ * that token's DARK value. ADD EVERY NEW TOKEN TO ALL FOUR BLOCKS.
+ *
+ * `--bg-sunken` / `--surface-inset` / `--fg-body` / `--fg-faint` / `--accent` /
+ * `--accent-strong` exist so the chrome and type primitives shared with toon-recipe
+ * (sidebar ground, `.eyebrow` colour, body copy) resolve here too — derived from
+ * THIS palette's paper/ink/gold, not copied from the recipe app's sand.
  */
 
 :root {
@@ -100,6 +112,12 @@
   --ring: var(--toon-brand-400);
   --overlay: rgb(27 29 28 / 45%);
   --skeleton: var(--toon-paper-200);
+  --surface-inset: var(--toon-paper-100);
+  --bg-sunken: var(--toon-paper-100);
+  --fg-body: var(--toon-ink-700);
+  --fg-faint: var(--toon-ink-500);
+  --accent: var(--toon-accent-500);
+  --accent-strong: var(--toon-accent-600);
 
   --elevation-soft: 0 1px 2px rgb(27 29 28 / 6%), 0 1px 3px rgb(27 29 28 / 5%);
   --elevation-card: 0 1px 2px rgb(27 29 28 / 5%), 0 4px 14px -6px rgb(27 29 28 / 12%);
@@ -145,6 +163,12 @@
     --ring: var(--toon-brand-300);
     --overlay: rgb(4 8 7 / 66%);
     --skeleton: #272d2b;
+    --surface-inset: #101312;
+    --bg-sunken: #0c0f0e;
+    --fg-body: #d9dedb;
+    --fg-faint: var(--toon-ink-400);
+    --accent: var(--toon-accent-400);
+    --accent-strong: var(--toon-accent-300);
 
     --elevation-soft: 0 1px 2px rgb(0 0 0 / 40%);
     --elevation-card: 0 1px 2px rgb(0 0 0 / 40%), 0 6px 18px -8px rgb(0 0 0 / 55%);
@@ -187,6 +211,12 @@
   --ring: var(--toon-brand-400);
   --overlay: rgb(27 29 28 / 45%);
   --skeleton: var(--toon-paper-200);
+  --surface-inset: var(--toon-paper-100);
+  --bg-sunken: var(--toon-paper-100);
+  --fg-body: var(--toon-ink-700);
+  --fg-faint: var(--toon-ink-500);
+  --accent: var(--toon-accent-500);
+  --accent-strong: var(--toon-accent-600);
   --elevation-fab: 0 10px 24px -8px rgb(15 110 112 / 60%);
 }
 
@@ -223,5 +253,11 @@
   --ring: var(--toon-brand-300);
   --overlay: rgb(4 8 7 / 66%);
   --skeleton: #272d2b;
+  --surface-inset: #101312;
+  --bg-sunken: #0c0f0e;
+  --fg-body: #d9dedb;
+  --fg-faint: var(--toon-ink-400);
+  --accent: var(--toon-accent-400);
+  --accent-strong: var(--toon-accent-300);
   --elevation-fab: 0 10px 24px -8px rgb(0 0 0 / 70%);
 }

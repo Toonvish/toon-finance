@@ -13,7 +13,7 @@ import { UpdateBanner } from "./UpdateBanner";
  *  - phones: sticky top bar + fixed bottom tab bar, content padded for both,
  *  - >= lg: fixed sidebar + centred content column, no top/bottom bars.
  *
- * `<main>` owns `mx-auto max-w-5xl px-gutter pt-4 pb-tabbar` — a page root
+ * `<main>` owns `mx-auto max-w-content px-gutter pt-4 pb-tabbar` — a page root
  * must not re-apply any of it (docs/spec.md §4.10): a doubled `pb-tabbar`
  * leaves a screenful of dead space under the content and strands a sticky
  * bottom bar above the tab bar instead of on it.
@@ -29,11 +29,16 @@ import { UpdateBanner } from "./UpdateBanner";
  * spacer `flex-1` is what lets the sticky "Buchen" bar on `/new` sit right
  * above the tab bar instead of floating mid-screen.
  */
+/*
+ * The sidebar width (`lg:pl-sidebar` here, `w-sidebar` on SideNav) and the content
+ * cap (`max-w-content`) are the two `@theme` scales in styles/index.css and MUST
+ * change together — see the note there.
+ */
 export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-dvh bg-bg">
       <SideNav />
-      <div className="flex min-h-dvh flex-col lg:pl-64">
+      <div className="flex min-h-dvh flex-col lg:pl-sidebar">
         <TopBar />
         <OfflineBanner />
         <UpdateBanner />
@@ -43,7 +48,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           everything Tailwind generates, so `.px-gutter` would win over
           `lg:px-8` and desktop would quietly keep the phone gutter.
         */}
-        <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-gutter pt-4 pb-tabbar lg:pt-8 lg:[--gutter:2rem]">
+        <main className="mx-auto flex w-full max-w-content flex-1 flex-col px-gutter pt-4 pb-tabbar lg:pt-8 lg:[--gutter:2rem]">
           <InstallPrompt />
           {children}
         </main>
@@ -71,7 +76,7 @@ export function PageHeader({ title, description, actions, above, className }: Pa
       {above}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h1 className="text-2xl leading-tight font-semibold tracking-tight text-fg sm:text-3xl">{title}</h1>
+          <h1 className="font-display text-display-xl font-medium text-fg sm:text-display-2xl">{title}</h1>
           {description ? <p className="mt-1 text-sm text-fg-muted">{description}</p> : null}
         </div>
         {actions ? <div className="flex shrink-0 flex-wrap gap-2">{actions}</div> : null}

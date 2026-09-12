@@ -13,8 +13,10 @@ const variants: Record<BadgeVariant, string> = {
 };
 
 const sizes: Record<BadgeSize, string> = {
-  sm: "px-2 py-0.5 text-[0.7rem]",
-  md: "px-2.5 py-1 text-xs",
+  // Real steps only: `text-xs` (12px) for the small count, the shared
+  // `--text-control` step for `md` so a badge and a button read at the same size.
+  sm: "px-2 py-0.5 text-xs",
+  md: "px-2.5 py-1 text-control",
 };
 
 export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {

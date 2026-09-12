@@ -94,7 +94,7 @@ export function MonthSummaryCard({ householdId }: { householdId: string }) {
                     style={{ height: `${heightPct}%` }}
                   />
                 </div>
-                <span className="text-[0.65rem] text-fg-subtle">{monthShortLabel(entry.period, locale)}</span>
+                <span className="text-xs text-fg-subtle">{monthShortLabel(entry.period, locale)}</span>
               </li>
             );
           })}

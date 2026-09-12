@@ -1,33 +1,14 @@
-import type { ReactNode } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { Users, Wallet } from "lucide-react";
+import { Users } from "lucide-react";
 import { useT } from "@/lib/i18n/I18nProvider.tsx";
 import { isApiError } from "@/lib/api";
 import { useLogout, useSession } from "@/lib/session";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingBlock } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
+import { AuthLayout } from "./AuthLayout";
 import { useAcceptInvite, useInvitePreview } from "./lib/queries";
-
-function AuthCard({ title, subtitle, children }: { title: string; subtitle: ReactNode; children: ReactNode }) {
-  return (
-    <div className="flex min-h-dvh items-center justify-center bg-bg px-gutter py-8">
-      <Card padding="lg" className="w-full max-w-sm">
-        <span
-          aria-hidden="true"
-          className="mx-auto flex size-12 items-center justify-center rounded-full bg-brand-soft text-brand-soft-fg"
-        >
-          <Wallet className="size-6" />
-        </span>
-        <h1 className="mt-4 text-center text-xl font-semibold text-fg">{title}</h1>
-        <div className="mt-1 text-center text-sm text-fg-muted">{subtitle}</div>
-        <div className="mt-6">{children}</div>
-      </Card>
-    </div>
-  );
-}
 
 /**
  * `/invite/$token` — public preview of an invite, plus the join action for a
@@ -59,13 +40,13 @@ export function InvitePage() {
     const message =
       code === "invite_expired" ? t("auth.invite.expired") : t("auth.invite.invalid");
     return (
-      <AuthCard title={t("auth.invite.title")} subtitle={message}>
+      <AuthLayout title={t("auth.invite.title")} description={message}>
         <Link to="/login" className="block">
           <Button fullWidth variant="secondary">
             {t("auth.login.title")}
           </Button>
         </Link>
-      </AuthCard>
+      </AuthLayout>
     );
   }
 
@@ -77,9 +58,9 @@ export function InvitePage() {
   // the only offer here is "sign out, then create the account".
   if (invite.claimsDisplayName !== null) {
     return (
-      <AuthCard
+      <AuthLayout
         title={t("auth.invite.title")}
-        subtitle={t("auth.invite.claimSubtitle", {
+        description={t("auth.invite.claimSubtitle", {
           name: invite.invitedByName,
           household: invite.householdName,
           display: invite.claimsDisplayName,
@@ -99,14 +80,14 @@ export function InvitePage() {
             </Button>
           </Link>
         )}
-      </AuthCard>
+      </AuthLayout>
     );
   }
 
   return (
-    <AuthCard
+    <AuthLayout
       title={t("auth.invite.title")}
-      subtitle={t("auth.invite.subtitle", { name: invite.invitedByName, household: invite.householdName })}
+      description={t("auth.invite.subtitle", { name: invite.invitedByName, household: invite.householdName })}
     >
       {isAuthenticated ? (
         <Button
@@ -149,7 +130,7 @@ export function InvitePage() {
           </Link>
         </div>
       )}
-    </AuthCard>
+    </AuthLayout>
   );
 }
 

@@ -9,4 +9,5 @@ export const navEn: LocaleCatalog<NavCatalog> = {
   "nav.plan": "Fixed costs",
   "nav.categories": "Categories",
   "nav.household": "Household",
+  "nav.manage": "Manage",
 };

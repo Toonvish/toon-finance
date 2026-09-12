@@ -13,13 +13,18 @@ import { NAV_ITEMS } from "./nav-items";
  * `nav-items.ts` for why there are exactly four, and why "Erfassen" is NOT
  * one of them any more: it is the floating "+" (`QuickAddFab`) that sits on
  * every screen, and the tab it freed went to Fixkosten.
+ *
+ * Ground and border follow the sidebar (`bg-bg-sunken` / `border-surface-2`), the
+ * same two values, so the two chrome pieces read as one system — and as
+ * toon-recipe's. The old translucent `bg-surface/95 backdrop-blur-md` is gone: an
+ * opaque `--bg-sunken` bar needs no blur.
  */
 export function BottomTabBar() {
   const t = useT();
   return (
     <nav
       aria-label={t("nav.overview")}
-      className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 pb-safe backdrop-blur-md lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 border-t border-surface-2 bg-bg-sunken pb-safe lg:hidden"
     >
       <ul className="flex items-stretch justify-around px-safe">
         {NAV_ITEMS.map((item) => (
@@ -27,14 +32,14 @@ export function BottomTabBar() {
             <Link
               to={item.to}
               activeOptions={{ exact: item.exact }}
-              className="group flex h-tabbar flex-col items-center justify-center gap-1 px-0.5 text-fg-muted transition-colors duration-150"
-              activeProps={{ className: "text-brand", "aria-current": "page" }}
+              className="group flex h-tabbar flex-col items-center justify-center gap-1 px-0.5 text-fg-subtle transition-colors duration-150"
+              activeProps={{ className: "text-brand-soft-fg", "aria-current": "page" }}
             >
               {({ isActive }) => (
                 <>
                   <span
                     className={cn(
-                      "flex h-7 w-10 items-center justify-center rounded-full transition-colors duration-150",
+                      "flex h-7 w-11 items-center justify-center rounded-full transition-colors duration-150",
                       isActive && "bg-brand-soft",
                     )}
                   >

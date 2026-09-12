@@ -168,7 +168,7 @@ export function Dialog({
           <div className="flex items-start gap-3 px-5 pt-4 pb-2">
             <div className="min-w-0 flex-1">
               {title ? (
-                <h2 id={titleId} className="text-lg leading-tight font-semibold">
+                <h2 id={titleId} className="font-display text-display-md font-medium">
                   {title}
                 </h2>
               ) : null}

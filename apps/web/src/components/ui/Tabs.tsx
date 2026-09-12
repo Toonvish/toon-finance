@@ -61,7 +61,7 @@ export function Tabs<Value extends string = string>({
       }}
       className={cn(
         "flex gap-1",
-        variant === "segmented" && "rounded-xl bg-surface-2 p-1",
+        variant === "segmented" && "rounded-xl border border-line bg-surface p-1",
         variant === "underline" && "border-b border-line",
         scrollable && "no-scrollbar overflow-x-auto",
         className,
@@ -80,10 +80,10 @@ export function Tabs<Value extends string = string>({
             disabled={item.disabled}
             onClick={() => onChange(item.value)}
             className={cn(
-              "inline-flex min-h-10 flex-1 items-center justify-center gap-2 px-3 text-sm font-medium whitespace-nowrap transition-colors duration-150 disabled:opacity-50 [&_svg]:size-4",
+              "inline-flex min-h-11 flex-1 items-center justify-center gap-2 px-3 text-control font-semibold whitespace-nowrap transition-colors duration-150 disabled:opacity-50 [&_svg]:size-4",
               scrollable && "flex-none",
               variant === "segmented" &&
-                (active ? "rounded-lg bg-surface text-fg shadow-soft" : "rounded-lg text-fg-muted hover:text-fg"),
+                (active ? "rounded-control bg-brand-soft text-brand-soft-fg" : "rounded-control text-fg-subtle hover:text-fg"),
               variant === "underline" &&
                 (active
                   ? "-mb-px border-b-2 border-brand text-fg"
@@ -93,7 +93,7 @@ export function Tabs<Value extends string = string>({
             {item.icon}
             {item.label}
             {item.badge !== undefined ? (
-              <span className="rounded-full bg-surface-2 px-1.5 text-xs text-fg-muted">{item.badge}</span>
+              <span className="text-fg-subtle">· {item.badge}</span>
             ) : null}
           </button>
         );

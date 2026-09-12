@@ -61,7 +61,7 @@ export function ErrorState({ error, title, description, onRetry, action, classNa
       >
         {offline ? <WifiOff /> : <CircleAlert />}
       </span>
-      <h2 className="text-lg font-semibold text-fg">{heading}</h2>
+      <h2 className="font-display text-display-md font-medium text-fg">{heading}</h2>
       {message ? <p className="max-w-prose text-sm text-fg-muted">{message}</p> : null}
       <div className="mt-2 flex flex-col gap-2 sm:flex-row">
         {onRetry ? (

@@ -127,7 +127,7 @@ export function TransactionList({
         const dayTotalCents = dayItems.reduce((sum, item) => sum + item.amountCents, 0);
         return (
           <Card key={key} as="section" padding="none" aria-label={heading} className="overflow-hidden">
-            <h2 className="flex items-center justify-between gap-3 bg-surface-2 px-4 py-2 text-[0.7rem] font-semibold tracking-wide text-fg-muted uppercase">
+            <h2 className="eyebrow flex items-center justify-between gap-3 bg-surface-2 px-4 py-2 text-fg-faint">
               <span className="min-w-0 truncate">{heading}</span>
               <AmountText cents={dayTotalCents} size="sm" className="shrink-0 tracking-normal normal-case" />
             </h2>

@@ -178,6 +178,22 @@ EINE Fläche, den `BalanceHero` (`Card tone="brand"`). **Gold** heißt Fixkosten
 (`Card tone="accent"`). **Grün/Rot** bleiben Ledger-Semantik. Eine zweite petrolgefüllte Karte nimmt
 dem Saldo den ersten Blick; eine goldene Karte anderswo macht beide Farben bedeutungslos.
 
+**Typografie, Radien und Chrome sind mit toon-recipe GETEILT, die Farben nicht** (2026-09-12).
+`styles/fonts.css` deklariert dieselben vier selbst gehosteten Dateien (Figtree = `font-sans`,
+Newsreader 500 = `font-display`; im SW-Precache, deshalb `woff2` in den `globPatterns`), und
+`styles/index.css` trägt dieselbe Skala: `text-control` (13,5 px — Buttons, Chips, Tabs, Badges,
+Labels), `text-item`, `text-display-*` (Serif, immer `font-display font-medium`), `rounded-control`
+(10 px — Buttons, Nav, IconButton), `.eyebrow` (die Versal-Mikroüberschrift; NIE mit einem `text-*`
+kombinieren, sie gewinnt), `w-sidebar`/`lg:pl-sidebar` (236 px) und `max-w-content` (1204 px) —
+die beiden Letzten IMMER zusammen ändern. Karten sind flach (`Card shadow="none"` ist Default, der
+Rahmen ist die Textur), gefüllte Buttons sind 700, leise 600. Die dafür nötigen Neutraltöne
+(`--bg-sunken`, `--surface-inset`, `--fg-body`, `--fg-faint`, `--accent`, `--accent-strong`) sind aus
+DIESER Paper/Ink/Gold-Palette abgeleitet und stehen in allen VIER Blöcken von `theme.css` — ein Token,
+der in einem fehlt, rendert „hell auf dunklem Handy" in seiner Dunkelfarbe. Das App-Zeichen ist
+`components/layout/Logo.tsx` (Brieftasche, dieselbe Konstruktion wie der Rezepte-Topf); `favicon.svg`
+und die PNGs entstehen daraus per `scripts/icons.sh`. Der Anzeigename ist „Finanzen"
+(`common.appName`, `<title>`, Manifest) — `toon-finance` bleibt der Repo-/Storage-Präfix.
+
 ## Konventionen
 
 - **Fehler**: immer `{ error: { code, message, details? } }` mit passendem Status. `code` aus

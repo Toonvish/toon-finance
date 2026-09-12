@@ -1,34 +1,15 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "@tanstack/react-router";
-import { CheckCircle2, Mail, Wallet } from "lucide-react";
+import { CheckCircle2, Mail } from "lucide-react";
 import { LoginRequestSchema } from "@toon/shared";
 import { useT } from "@/lib/i18n/I18nProvider.tsx";
 import { safeNextPath, useGoTo, useSearchParams } from "@/lib/navigation";
 import { useLogin, useSession } from "@/lib/session";
 import { apiFieldErrors, clearField, validate, type FieldErrors } from "@/lib/validation";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Input, PasswordInput } from "@/components/ui/Input";
-
-/** Shared shell of every public auth screen: centred card, app mark, title. */
-function AuthCard({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) {
-  return (
-    <div className="flex min-h-dvh items-center justify-center bg-bg px-gutter py-8">
-      <Card padding="lg" className="w-full max-w-sm">
-        <span
-          aria-hidden="true"
-          className="mx-auto flex size-12 items-center justify-center rounded-full bg-brand-soft text-brand-soft-fg"
-        >
-          <Wallet className="size-6" />
-        </span>
-        <h1 className="mt-4 text-center text-xl font-semibold text-fg">{title}</h1>
-        <p className="mt-1 text-center text-sm text-fg-muted">{subtitle}</p>
-        <div className="mt-6">{children}</div>
-      </Card>
-    </div>
-  );
-}
+import { AuthLayout } from "./AuthLayout";
 
 /** `/login` — e-mail + password, the only sign-in method (docs/spec.md §1.2 #4). */
 export function LoginPage() {
@@ -63,7 +44,7 @@ export function LoginPage() {
   }
 
   return (
-    <AuthCard title={t("auth.login.title")} subtitle={t("auth.login.subtitle")}>
+    <AuthLayout title={t("auth.login.title")} description={t("auth.login.subtitle")}>
       {/* `?reset=1` is set by ResetPasswordPage: the reset revoked every session,
           so landing here and being asked to sign in again is expected. */}
       {search.reset === "1" ? (
@@ -129,7 +110,7 @@ export function LoginPage() {
           {t("auth.login.toRegister")}
         </Link>
       </p>
-    </AuthCard>
+    </AuthLayout>
   );
 }
 

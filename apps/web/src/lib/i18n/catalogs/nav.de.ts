@@ -8,6 +8,7 @@ export const navDe = {
   "nav.plan": "Fixkosten",
   "nav.categories": "Kategorien",
   "nav.household": "Haushalt",
+  "nav.manage": "Verwalten",
 } as const satisfies NamespaceCatalog<"nav">;
 
 export type NavCatalog = typeof navDe;

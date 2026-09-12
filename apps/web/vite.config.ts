@@ -43,7 +43,7 @@ export default defineConfig(({ mode }) => {
         filename: "sw.js",
         manifest: {
           id: "/",
-          name: "toon-finance",
+          name: "Finanzen",
           short_name: "Finanzen",
           description: "Haushaltskasse für zwei: Ausgaben erfassen, aufteilen und ausgleichen.",
           lang: "de",
@@ -54,7 +54,7 @@ export default defineConfig(({ mode }) => {
           display_override: ["standalone", "minimal-ui"],
           orientation: "any",
           background_color: "#f5f3ef",
-          theme_color: "#f5f3ef",
+          theme_color: "#0f6e70",
           categories: ["finance", "productivity"],
           icons: [
             { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
@@ -74,7 +74,10 @@ export default defineConfig(({ mode }) => {
           ],
         },
         workbox: {
-          globPatterns: ["**/*.{js,css,html,svg,png,ico,webmanifest}"],
+          // `woff2` IS PRESENT: the four self-hosted font files total ~65 KB, are
+          // needed by EVERY screen, and are needed OFFLINE — an unavailable webfont
+          // reflows the whole ledger from Figtree/Newsreader to the system fallback.
+          globPatterns: ["**/*.{js,css,html,svg,png,ico,webmanifest,woff2}"],
           globIgnores: ["**/*.map"],
           navigateFallback: "/index.html",
           // NEVER serve the SPA shell for API calls. Unchanged, and it must stay

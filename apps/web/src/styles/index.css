@@ -1,28 +1,37 @@
 /*
  * Global stylesheet. Order matters:
  *   1. tailwindcss  (preflight + utility engine)
- *   2. theme.css    (raw CSS custom properties, light + dark)
- *   3. @theme inline (maps the semantic tokens into Tailwind utilities)
+ *   2. fonts.css    (self-hosted @font-face declarations, Figtree + Newsreader)
+ *   3. theme.css    (raw CSS custom properties, light + dark)
+ *   4. @theme inline (maps the semantic tokens into Tailwind utilities)
  *
- * The five hand-written utilities (`.px-gutter`, `.px-safe`, `.pt-safe`,
- * `.pb-tabbar`, `.bottom-tabbar`) are emitted in `@layer utilities`, i.e.
- * AFTER everything Tailwind generates — see CLAUDE.md gotchas 14/15 for why
+ * The hand-written utilities (`.px-gutter`, `.px-safe`, `.pt-safe`, `.pb-tabbar`,
+ * `.bottom-tabbar`, `.bleed-gutter*`, `.eyebrow`) are emitted in `@layer utilities`,
+ * i.e. AFTER everything Tailwind generates — see CLAUDE.md gotchas 14/15 for why
  * `.px-safe` must never sit next to `px-4` and why a sticky bar needs
  * `.bottom-tabbar` instead of `bottom-0`.
+ *
+ * TYPE, RADII AND THE CHROME MEASUREMENTS ARE SHARED WITH toon-recipe: the two apps
+ * are one household toolset and read as one system. Only the COLOURS differ, and
+ * they live in theme.css (petrol here, paprika there).
  */
 @import "tailwindcss";
+@import "./fonts.css";
 @import "./theme.css";
 
 @theme inline {
   --font-sans:
-    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans",
-    sans-serif;
+    Figtree, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, "Noto Sans", sans-serif;
+  --font-display:
+    Newsreader, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, ui-serif, serif;
 
   /* Semantic colours — usable as bg-*, text-*, border-*, ring-*, fill-*. */
   --color-bg: var(--bg);
   --color-bg-elevated: var(--bg-elevated);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
+  --color-surface-inset: var(--surface-inset);
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
   --color-fg: var(--fg);
@@ -33,6 +42,8 @@
   --color-brand-fg: var(--brand-fg);
   --color-brand-soft: var(--brand-soft);
   --color-brand-soft-fg: var(--brand-soft-fg);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
   --color-accent-soft: var(--accent-soft);
   --color-accent-soft-fg: var(--accent-soft-fg);
   --color-accent-line: var(--accent-line);
@@ -50,19 +61,58 @@
   --color-ring: var(--ring);
   --color-overlay: var(--overlay);
   --color-skeleton: var(--skeleton);
+  --color-bg-sunken: var(--bg-sunken);
+  --color-fg-body: var(--fg-body);
+  --color-fg-faint: var(--fg-faint);
 
   --shadow-soft: var(--elevation-soft);
   --shadow-card: var(--elevation-card);
   --shadow-pop: var(--elevation-pop);
   --shadow-fab: var(--elevation-fab);
 
-  --radius-card: 0.875rem;
-  --radius-sheet: 1.375rem;
+  --radius-card: 1rem;
+  --radius-sheet: 1.25rem;
+  --radius-control: 0.625rem; /* 10px — the design's button/nav radius */
 
   /* Generates h-tabbar/h-topbar (and related width/padding utilities) from
      the same height used by .pb-tabbar/.bottom-tabbar below — one source of truth. */
   --spacing-tabbar: var(--tabbar-h);
   --spacing-topbar: var(--topbar-h);
+  /*
+   * The desktop chrome has two measurements and THEY MUST ALWAYS CHANGE TOGETHER:
+   * the sidebar (`w-sidebar` on SideNav, `lg:pl-sidebar` on AppShell's column) and
+   * the content column cap (`max-w-content` on <main>). A mismatch either overlaps
+   * the content or leaves a strip of `--bg` beside the sidebar. Same values as
+   * toon-recipe.
+   */
+  --spacing-sidebar: 14.75rem; /* 236px */
+  --container-content: 75.25rem; /* 1204px */
+
+  /* --- type scale: the two sans steps Tailwind has no stop for ---------------- */
+  --text-control: 0.84375rem; /* 13.5px — buttons, chips, tabs, secondary nav */
+  --text-control--line-height: 1.2;
+  --text-item: 0.9375rem; /* 15px — transaction rows */
+  --text-item--line-height: 1.35;
+
+  /* --- display (serif) scale — always weight 500, always with `font-display` ---- */
+  --text-display-xs: 0.9375rem;
+  --text-display-xs--line-height: 1.25;
+  --text-display-sm: 1.0625rem;
+  --text-display-sm--line-height: 1.2;
+  --text-display-md: 1.3125rem;
+  --text-display-md--line-height: 1.2;
+  --text-display-lg: 1.5rem;
+  --text-display-lg--line-height: 1.2;
+  --text-display-xl: 1.75rem;
+  --text-display-xl--line-height: 1.1;
+  --text-display-2xl: 2.125rem;
+  --text-display-2xl--line-height: 1.05;
+  --text-display-2xl--letter-spacing: -0.01em;
+  --text-display-3xl: 2.375rem;
+  --text-display-3xl--line-height: 1.1;
+  --text-display-4xl: 2.875rem;
+  --text-display-4xl--line-height: 1.05;
+  --text-display-4xl--letter-spacing: -0.01em;
 }
 
 /* Dark variant that honours BOTH the OS preference and an explicit data-theme. */
@@ -109,6 +159,10 @@
     text-wrap: balance;
   }
 
+  p {
+    text-wrap: pretty;
+  }
+
   /* iOS zooms any input with a font-size below 16px on focus. */
   input,
   select,
@@ -152,6 +206,23 @@
     padding-left: max(var(--gutter, 1rem), env(safe-area-inset-left, 0px));
     padding-right: max(var(--gutter, 1rem), env(safe-area-inset-right, 0px));
   }
+  /*
+   * Breaks a child OUT of <main>'s px-gutter — a full-bleed header rail or bottom
+   * bar. The negative margin must be the SAME max() expression `.px-gutter` uses,
+   * or a notched phone in landscape bleeds by the wrong amount. NEVER combine with
+   * `px-4`/`.px-safe` — see the `.px-safe` note above; `-mx-4` is wrong for the
+   * same reason, since it assumes the gutter is exactly 1rem, which it is not at
+   * `lg` (`--gutter:2rem`) or on a notched device.
+   */
+  .bleed-gutter {
+    margin-inline: calc(-1 * max(var(--gutter, 1rem), env(safe-area-inset-left, 0px)));
+  }
+  /* `.bleed-gutter` plus the gutter restored inside — for a bleeding bar with content. */
+  .bleed-gutter-inset {
+    margin-inline: calc(-1 * max(var(--gutter, 1rem), env(safe-area-inset-left, 0px)));
+    padding-left: max(var(--gutter, 1rem), env(safe-area-inset-left, 0px));
+    padding-right: max(var(--gutter, 1rem), env(safe-area-inset-right, 0px));
+  }
   /* Leaves room for the fixed bottom tab bar on small screens. */
   .pb-tabbar {
     padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px) + 1rem);
@@ -192,6 +263,29 @@
   .scroll-x {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+  }
+  /*
+   * The uppercase micro-label: day headings in the transaction list, field-group
+   * captions in the capture form, the sidebar's section label, stat captions.
+   * Bundles five declarations because they are never used apart, and
+   * `text-transform` cannot live in a Tailwind --text-* token.
+   *
+   * Named `.eyebrow`, NOT `.text-eyebrow`: the hand-written utilities in this file
+   * are emitted after everything Tailwind generates, so a name in the `text-*` shape
+   * would silently override a real size utility on the same element. NEVER combine
+   * `.eyebrow` with a `text-*` size utility for the same reason — `.eyebrow` would
+   * win.
+   *
+   * COLOUR IS NOT PART OF IT: `text-fg-faint` for structural labels,
+   * `text-accent-strong` for the fixed-cost plan's own captions, `text-success` /
+   * `text-danger` for ledger semantics.
+   */
+  .eyebrow {
+    font-size: 0.6875rem;
+    line-height: 1.1;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
 }
 

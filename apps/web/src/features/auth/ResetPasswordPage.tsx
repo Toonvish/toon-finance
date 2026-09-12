@@ -1,34 +1,15 @@
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Wallet } from "lucide-react";
 import { ResetPasswordRequestSchema } from "@toon/shared";
 import { useT } from "@/lib/i18n/I18nProvider.tsx";
 import { isApiError } from "@/lib/api";
 import { useSearchParams } from "@/lib/navigation";
 import { apiFieldErrors, clearField, validate, type FieldErrors } from "@/lib/validation";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { PasswordInput } from "@/components/ui/Input";
+import { AuthLayout } from "./AuthLayout";
 import { useResetPassword } from "./lib/queries";
-
-function AuthCard({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) {
-  return (
-    <div className="flex min-h-dvh items-center justify-center bg-bg px-gutter py-8">
-      <Card padding="lg" className="w-full max-w-sm">
-        <span
-          aria-hidden="true"
-          className="mx-auto flex size-12 items-center justify-center rounded-full bg-brand-soft text-brand-soft-fg"
-        >
-          <Wallet className="size-6" />
-        </span>
-        <h1 className="mt-4 text-center text-xl font-semibold text-fg">{title}</h1>
-        <p className="mt-1 text-center text-sm text-fg-muted">{subtitle}</p>
-        <div className="mt-6">{children}</div>
-      </Card>
-    </div>
-  );
-}
 
 /**
  * `/password/reset?token=` — spends a mailed reset token. On success EVERY
@@ -74,16 +55,16 @@ export function ResetPasswordPage() {
 
   if (!token || invalid) {
     return (
-      <AuthCard title={t("auth.reset.title")} subtitle={t("auth.reset.invalid")}>
+      <AuthLayout title={t("auth.reset.title")} description={t("auth.reset.invalid")}>
         <Link to="/password/forgot" className="block">
           <Button fullWidth>{t("auth.forgot.submit")}</Button>
         </Link>
-      </AuthCard>
+      </AuthLayout>
     );
   }
 
   return (
-    <AuthCard title={t("auth.reset.title")} subtitle="">
+    <AuthLayout title={t("auth.reset.title")} description="">
       <form onSubmit={submit} noValidate className="flex flex-col gap-4">
         {errors._form ? <ErrorState inline description={errors._form} /> : null}
         <PasswordInput
@@ -102,7 +83,7 @@ export function ResetPasswordPage() {
           {t("auth.reset.submit")}
         </Button>
       </form>
-    </AuthCard>
+    </AuthLayout>
   );
 }
 

@@ -100,7 +100,7 @@ export function ActionMenu({
                   </span>
                 ) : null}
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate font-medium">{item.label}</span>
+                  <span className="block truncate text-control font-medium">{item.label}</span>
                   {item.description ? (
                     <span className="mt-0.5 block truncate text-xs text-fg-muted">{item.description}</span>
                   ) : null}

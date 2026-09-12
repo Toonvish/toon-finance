@@ -10,12 +10,12 @@ import { useT } from "@/lib/i18n/I18nProvider.tsx";
  * `<label>` that labels nothing is worse than a `<span>`. Written out four
  * times before, once now.
  */
-export const captionClasses = "block text-xs font-semibold tracking-wide text-fg-subtle uppercase";
+export const captionClasses = "eyebrow block text-fg-faint";
 
 export type LabelVariant = "default" | "caption";
 
 const variants: Record<LabelVariant, string> = {
-  default: "block text-sm font-medium text-fg",
+  default: "block text-control font-medium text-fg",
   caption: captionClasses,
 };
 

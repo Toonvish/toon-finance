@@ -29,7 +29,7 @@ const sizes: Record<IconButtonSize, string> = {
 };
 
 const shapes: Record<IconButtonShape, string> = {
-  square: "rounded-xl",
+  square: "rounded-control",
   circle: "rounded-full",
 };
 

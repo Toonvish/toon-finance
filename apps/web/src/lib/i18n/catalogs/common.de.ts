@@ -6,7 +6,7 @@ import type { NamespaceCatalog } from "@toon/shared";
  * rephrase them here; if a text is missing, it is added to the spec first.
  */
 export const commonDe = {
-  "common.appName": "toon-finance",
+  "common.appName": "Finanzen",
   "common.save": "Speichern",
   "common.cancel": "Abbrechen",
   "common.delete": "Löschen",

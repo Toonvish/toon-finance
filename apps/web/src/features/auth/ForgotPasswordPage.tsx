@@ -1,32 +1,14 @@
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useState, type FormEvent } from "react";
 import { Link } from "@tanstack/react-router";
-import { CheckCircle2, Mail, Wallet } from "lucide-react";
+import { CheckCircle2, Mail } from "lucide-react";
 import { ForgotPasswordRequestSchema } from "@toon/shared";
 import { useT } from "@/lib/i18n/I18nProvider.tsx";
 import { apiFieldErrors, clearField, validate, type FieldErrors } from "@/lib/validation";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
+import { AuthLayout } from "./AuthLayout";
 import { useRequestPasswordReset } from "./lib/queries";
-
-function AuthCard({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) {
-  return (
-    <div className="flex min-h-dvh items-center justify-center bg-bg px-gutter py-8">
-      <Card padding="lg" className="w-full max-w-sm">
-        <span
-          aria-hidden="true"
-          className="mx-auto flex size-12 items-center justify-center rounded-full bg-brand-soft text-brand-soft-fg"
-        >
-          <Wallet className="size-6" />
-        </span>
-        <h1 className="mt-4 text-center text-xl font-semibold text-fg">{title}</h1>
-        <p className="mt-1 text-center text-sm text-fg-muted">{subtitle}</p>
-        <div className="mt-6">{children}</div>
-      </Card>
-    </div>
-  );
-}
 
 /**
  * `/password/forgot` — always ends in the same confirmation, whether or not
@@ -55,7 +37,7 @@ export function ForgotPasswordPage() {
   }
 
   return (
-    <AuthCard title={t("auth.forgot.title")} subtitle={t("auth.forgot.subtitle")}>
+    <AuthLayout title={t("auth.forgot.title")} description={t("auth.forgot.subtitle")}>
       {submitted ? (
         <p
           role="status"
@@ -95,7 +77,7 @@ export function ForgotPasswordPage() {
           {t("auth.login.title")}
         </Link>
       </p>
-    </AuthCard>
+    </AuthLayout>
   );
 }
 

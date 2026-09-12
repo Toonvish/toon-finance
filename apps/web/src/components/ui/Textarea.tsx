@@ -60,11 +60,11 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
         {...rest}
       />
       {error ? (
-        <p id={`${id}-error`} role="alert" className="text-sm font-medium text-danger">
+        <p id={`${id}-error`} role="alert" className="text-xs font-medium text-danger">
           {error}
         </p>
       ) : hint ? (
-        <p id={`${id}-hint`} className="text-sm text-fg-muted">
+        <p id={`${id}-hint`} className="text-xs text-fg-muted">
           {hint}
         </p>
       ) : null}
